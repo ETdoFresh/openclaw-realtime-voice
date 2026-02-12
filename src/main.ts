@@ -14,6 +14,8 @@ interface WebSocketMessage {
   taskId?: string;
   text?: string;
   sessionId?: string;
+  timestamp?: number;
+  error?: boolean;
 }
 
 interface RTCSessionEvent {
@@ -186,8 +188,11 @@ async function connect(): Promise<void> {
 
     ws.onmessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data) as WebSocketMessage;
+
       if (data.type === 'result') {
-        log(`Task result: ${data.text}`, 'task');
+        const logType = data.error ? 'error' : 'task';
+        log(`Task result: ${data.text}`, logType);
+
         // Inject result as conversation item
         if (dc && dc.readyState === 'open') {
           const responseEvent = {
@@ -202,6 +207,25 @@ async function connect(): Promise<void> {
             }
           };
           dc.send(JSON.stringify(responseEvent));
+          dc.send(JSON.stringify({ type: 'response.create' }));
+        }
+      } else if (data.type === 'notification') {
+        log(`📢 Notification: ${data.text}`, 'task');
+
+        // Inject notification as conversation item so the voice agent reads it aloud
+        if (dc && dc.readyState === 'open') {
+          const notificationEvent = {
+            type: 'conversation.item.create',
+            item: {
+              type: 'message',
+              role: 'user',
+              content: [{
+                type: 'input_text',
+                text: `[Notification] ${data.text}`
+              }]
+            }
+          };
+          dc.send(JSON.stringify(notificationEvent));
           dc.send(JSON.stringify({ type: 'response.create' }));
         }
       }
