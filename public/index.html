@@ -6,47 +6,76 @@
   <title>OpenClaw Realtime Voice</title>
 </head>
 <body>
-  <div class="container">
-    <h1>OpenClaw Realtime Voice</h1>
-    <div class="subtitle">Phase 1 Prototype - WebRTC Voice Interface</div>
+  <div class="main-layout">
+    <div class="container">
+      <h1>OpenClaw Realtime Voice</h1>
+      <div class="subtitle">Production-Ready Voice Interface</div>
 
-    <div class="status">
-      <div class="status-indicator" id="statusIndicator"></div>
-      <div class="status-text" id="statusText">Disconnected</div>
-    </div>
-
-    <div class="settings">
-      <div class="setting-row">
-        <label for="voiceSelect">Voice</label>
-        <select id="voiceSelect">
-          <option value="alloy">Alloy</option>
-          <option value="ash">Ash</option>
-          <option value="ballad">Ballad</option>
-          <option value="cedar">Cedar</option>
-          <option value="coral" selected>Coral</option>
-          <option value="marin">Marin</option>
-          <option value="sage">Sage</option>
-          <option value="verse">Verse</option>
-        </select>
+      <div class="status">
+        <div class="status-indicator" id="statusIndicator"></div>
+        <div class="status-text" id="statusText">Disconnected</div>
       </div>
-      <div class="setting-row">
-        <label for="speedRange">Speed</label>
-        <div class="speed-control">
-          <input type="range" id="speedRange" min="0" max="4" step="1" value="2">
-          <span id="speedLabel">Normal</span>
+
+      <!-- Audio Visualizer -->
+      <div class="visualizer-container">
+        <canvas id="visualizer" width="600" height="80"></canvas>
+      </div>
+
+      <div class="settings">
+        <div class="setting-row">
+          <label for="voiceSelect">Voice</label>
+          <select id="voiceSelect">
+            <option value="alloy">Alloy</option>
+            <option value="ash">Ash</option>
+            <option value="ballad">Ballad</option>
+            <option value="cedar">Cedar</option>
+            <option value="coral" selected>Coral</option>
+            <option value="marin">Marin</option>
+            <option value="sage">Sage</option>
+            <option value="verse">Verse</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label for="speedRange">Speed</label>
+          <div class="speed-control">
+            <input type="range" id="speedRange" min="0" max="4" step="1" value="2">
+            <span id="speedLabel">Normal</span>
+          </div>
         </div>
       </div>
+
+      <div class="controls">
+        <button class="btn-connect" id="connectBtn">Connect</button>
+        <button class="btn-mute" id="muteBtn" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+          </svg>
+        </button>
+        <button class="btn-disconnect" id="disconnectBtn" disabled>Disconnect</button>
+      </div>
+
+      <!-- Task Status Area -->
+      <div class="task-status" id="taskStatus"></div>
+
+      <div class="log" id="log"></div>
+
+      <div class="footer">
+        Production-Ready: Voice + Task Management + OpenClaw Gateway
+      </div>
     </div>
 
-    <div class="controls">
-      <button class="btn-connect" id="connectBtn">Connect</button>
-      <button class="btn-disconnect" id="disconnectBtn" disabled>Disconnect</button>
-    </div>
-
-    <div class="log" id="log"></div>
-
-    <div class="footer">
-      Phase 1: Voice ↔ Mock Backend. Full OpenClaw integration in Phase 2.
+    <!-- Transcript Sidebar -->
+    <div class="transcript-sidebar" id="transcriptSidebar">
+      <div class="transcript-header">
+        <h3>Conversation</h3>
+        <button class="transcript-toggle" id="transcriptToggle">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+        </button>
+      </div>
+      <div class="transcript-content" id="transcriptContent"></div>
     </div>
   </div>
 

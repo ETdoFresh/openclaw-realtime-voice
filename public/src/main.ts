@@ -121,6 +121,33 @@ let pc: RTCPeerConnection | null = null;
 let dc: RTCDataChannel | null = null;
 let ws: WebSocket | null = null;
 const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+let audioContext: AudioContext | null = null;
+let analyser: AnalyserNode | null = null;
+let microphone: MediaStreamAudioSourceNode | null = null;
+let animationFrameId: number | null = null;
+let isMuted = false;
+let currentResponseId: string | null = null;
+
+// Optional auth token (set in sessionStorage or prompt user)
+// For production, this should be obtained from your auth system
+const authToken = sessionStorage.getItem('voiceAuthToken') || '';
+
+// Task tracking
+interface Task {
+  id: string;
+  message: string;
+  status: 'pending' | 'completed' | 'error';
+  timestamp: number;
+}
+const activeTasks = new Map<string, Task>();
+
+// Transcript tracking
+interface TranscriptEntry {
+  role: 'user' | 'assistant' | 'system';
+  text: string;
+  timestamp: number;
+}
+const transcript: TranscriptEntry[] = [];
 
 // DOM elements
 const statusIndicator = document.getElementById('statusIndicator') as HTMLDivElement;
@@ -128,14 +155,255 @@ const statusText = document.getElementById('statusText') as HTMLDivElement;
 const logDiv = document.getElementById('log') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const disconnectBtn = document.getElementById('disconnectBtn') as HTMLButtonElement;
+const muteBtn = document.getElementById('muteBtn') as HTMLButtonElement;
 const voiceSelect = document.getElementById('voiceSelect') as HTMLSelectElement;
 const speedRange = document.getElementById('speedRange') as HTMLInputElement;
 const speedLabel = document.getElementById('speedLabel') as HTMLSpanElement;
+const visualizerCanvas = document.getElementById('visualizer') as HTMLCanvasElement;
+const taskStatusDiv = document.getElementById('taskStatus') as HTMLDivElement;
+const transcriptSidebar = document.getElementById('transcriptSidebar') as HTMLDivElement;
+const transcriptContent = document.getElementById('transcriptContent') as HTMLDivElement;
+const transcriptToggle = document.getElementById('transcriptToggle') as HTMLButtonElement;
 
 // Speed slider label updates
 speedRange.addEventListener('input', () => {
   speedLabel.textContent = SPEED_OPTIONS[Number(speedRange.value)].label;
 });
+
+// Transcript sidebar toggle
+transcriptToggle.addEventListener('click', () => {
+  transcriptSidebar.classList.toggle('hidden');
+});
+
+// Audio Visualizer
+function setupVisualizer(stream: MediaStream): void {
+  audioContext = new AudioContext();
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 256;
+
+  microphone = audioContext.createMediaStreamSource(stream);
+  microphone.connect(analyser);
+
+  startVisualization();
+}
+
+function startVisualization(): void {
+  if (!analyser || !visualizerCanvas) return;
+
+  const ctx = visualizerCanvas.getContext('2d');
+  if (!ctx) return;
+
+  const bufferLength = analyser.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+
+  const draw = () => {
+    animationFrameId = requestAnimationFrame(draw);
+
+    analyser!.getByteFrequencyData(dataArray);
+
+    const width = visualizerCanvas.width;
+    const height = visualizerCanvas.height;
+
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, width, height);
+
+    const barWidth = (width / bufferLength) * 2.5;
+    let barHeight;
+    let x = 0;
+
+    for (let i = 0; i < bufferLength; i++) {
+      barHeight = (dataArray[i] / 255) * height * 0.8;
+
+      const gradient = ctx.createLinearGradient(0, height - barHeight, 0, height);
+      gradient.addColorStop(0, '#667eea');
+      gradient.addColorStop(1, '#764ba2');
+
+      ctx.fillStyle = gradient;
+      ctx.fillRect(x, height - barHeight, barWidth, barHeight);
+
+      x += barWidth + 1;
+    }
+  };
+
+  draw();
+}
+
+function stopVisualization(): void {
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+
+  if (microphone) {
+    microphone.disconnect();
+    microphone = null;
+  }
+
+  if (audioContext) {
+    audioContext.close();
+    audioContext = null;
+  }
+
+  // Clear canvas
+  const ctx = visualizerCanvas?.getContext('2d');
+  if (ctx && visualizerCanvas) {
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, visualizerCanvas.width, visualizerCanvas.height);
+  }
+}
+
+// Transcript Management
+function addToTranscript(role: 'user' | 'assistant' | 'system', text: string): void {
+  const entry: TranscriptEntry = {
+    role,
+    text,
+    timestamp: Date.now()
+  };
+
+  transcript.push(entry);
+  renderTranscript();
+}
+
+function renderTranscript(): void {
+  transcriptContent.innerHTML = '';
+
+  transcript.forEach(entry => {
+    const entryDiv = document.createElement('div');
+    entryDiv.className = `transcript-entry ${entry.role}`;
+
+    const roleDiv = document.createElement('div');
+    roleDiv.className = 'transcript-role';
+    roleDiv.textContent = entry.role;
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'transcript-text';
+    textDiv.textContent = entry.text;
+
+    const timeDiv = document.createElement('div');
+    timeDiv.className = 'transcript-time';
+    timeDiv.textContent = new Date(entry.timestamp).toLocaleTimeString();
+
+    entryDiv.appendChild(roleDiv);
+    entryDiv.appendChild(textDiv);
+    entryDiv.appendChild(timeDiv);
+
+    transcriptContent.appendChild(entryDiv);
+  });
+
+  transcriptContent.scrollTop = transcriptContent.scrollHeight;
+}
+
+// Task Status Management
+function addTask(taskId: string, message: string): void {
+  const task: Task = {
+    id: taskId,
+    message,
+    status: 'pending',
+    timestamp: Date.now()
+  };
+
+  activeTasks.set(taskId, task);
+  renderTaskStatus();
+}
+
+function updateTaskStatus(taskId: string, status: 'completed' | 'error'): void {
+  const task = activeTasks.get(taskId);
+  if (task) {
+    task.status = status;
+    renderTaskStatus();
+
+    // Remove completed/error tasks after 5 seconds
+    setTimeout(() => {
+      activeTasks.delete(taskId);
+      renderTaskStatus();
+    }, 5000);
+  }
+}
+
+function renderTaskStatus(): void {
+  if (activeTasks.size === 0) {
+    taskStatusDiv.innerHTML = '<div style="color: #666; text-align: center; padding: 20px;">No active tasks</div>';
+    return;
+  }
+
+  taskStatusDiv.innerHTML = '';
+
+  activeTasks.forEach(task => {
+    const taskDiv = document.createElement('div');
+    taskDiv.className = `task-item ${task.status}`;
+
+    const iconDiv = document.createElement('div');
+    if (task.status === 'pending') {
+      iconDiv.className = 'task-spinner';
+    } else if (task.status === 'completed') {
+      iconDiv.className = 'task-checkmark';
+      iconDiv.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      `;
+    } else {
+      iconDiv.className = 'task-error-icon';
+      iconDiv.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+      `;
+    }
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'task-text';
+    textDiv.textContent = task.message;
+
+    taskDiv.appendChild(iconDiv);
+    taskDiv.appendChild(textDiv);
+
+    taskStatusDiv.appendChild(taskDiv);
+  });
+}
+
+// Mute functionality
+function toggleMute(): void {
+  isMuted = !isMuted;
+
+  if (pc) {
+    const senders = pc.getSenders();
+    senders.forEach(sender => {
+      if (sender.track && sender.track.kind === 'audio') {
+        sender.track.enabled = !isMuted;
+      }
+    });
+  }
+
+  muteBtn.classList.toggle('muted', isMuted);
+  muteBtn.innerHTML = isMuted
+    ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+         <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28z"/>
+         <path d="M14.98 11.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99z"/>
+         <path d="M4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
+       </svg>`
+    : `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+         <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+         <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+       </svg>`;
+
+  log(isMuted ? 'Microphone muted' : 'Microphone unmuted', 'info');
+}
+
+muteBtn.addEventListener('click', toggleMute);
+
+// Barge-in handling: cancel current response when user starts speaking
+function handleBargeIn(): void {
+  if (currentResponseId && dc && dc.readyState === 'open') {
+    dc.send(JSON.stringify({
+      type: 'response.cancel'
+    }));
+    log('Interrupted current response (barge-in)', 'info');
+    currentResponseId = null;
+  }
+}
 
 // Logging function
 function log(message: string, type: 'info' | 'success' | 'error' | 'task' = 'info'): void {
@@ -166,9 +434,16 @@ async function connect(): Promise<void> {
     log(`Voice: ${selectedVoice}, Speed: ${SPEED_OPTIONS[selectedSpeed].label}`, 'info');
 
     // Fetch ephemeral token
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+
     const tokenResponse = await fetch('/api/token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ voice: selectedVoice })
     });
     if (!tokenResponse.ok) {
@@ -193,6 +468,14 @@ async function connect(): Promise<void> {
         const logType = data.error ? 'error' : 'task';
         log(`Task result: ${data.text}`, logType);
 
+        // Update task status
+        if (data.taskId) {
+          updateTaskStatus(data.taskId, data.error ? 'error' : 'completed');
+        }
+
+        // Add to transcript
+        addToTranscript('system', `Result: ${data.text}`);
+
         // Inject result as conversation item
         if (dc && dc.readyState === 'open') {
           const responseEvent = {
@@ -211,6 +494,9 @@ async function connect(): Promise<void> {
         }
       } else if (data.type === 'notification') {
         log(`📢 Notification: ${data.text}`, 'task');
+
+        // Add to transcript
+        addToTranscript('system', `Notification: ${data.text}`);
 
         // Inject notification as conversation item so the voice agent reads it aloud
         if (dc && dc.readyState === 'open') {
@@ -242,6 +528,9 @@ async function connect(): Promise<void> {
     // Get microphone access
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     log('Microphone access granted', 'success');
+
+    // Setup audio visualizer
+    setupVisualizer(stream);
 
     // Add audio track
     stream.getTracks().forEach(track => pc!.addTrack(track, stream));
@@ -284,6 +573,7 @@ async function connect(): Promise<void> {
 
       setStatus('connected', 'Connected - Speak now');
       disconnectBtn.disabled = false;
+      muteBtn.disabled = false;
     };
 
     dc.onmessage = async (event: MessageEvent) => {
@@ -292,9 +582,38 @@ async function connect(): Promise<void> {
       // Log important events
       if (msg.type === 'response.done') {
         log('Response completed', 'info');
+        currentResponseId = null;
+      } else if (msg.type === 'response.created') {
+        currentResponseId = (msg as any).response?.id || Date.now().toString();
+      } else if (msg.type === 'input_audio_buffer.speech_started') {
+        log('User started speaking', 'info');
+        handleBargeIn();
+        addToTranscript('user', '[Speaking...]');
       } else if (msg.type === 'conversation.item.created') {
         if (msg.item?.type === 'function_call') {
           log(`Tool called: ${msg.item.name}`, 'task');
+        } else if (msg.item?.type === 'message' && msg.item.role === 'user') {
+          const content = (msg.item.content as any)?.[0];
+          if (content?.type === 'input_audio' || content?.type === 'input_text') {
+            const text = content.transcript || content.text || '[Audio input]';
+            addToTranscript('user', text);
+          }
+        } else if (msg.item?.type === 'message' && msg.item.role === 'assistant') {
+          const content = (msg.item.content as any)?.[0];
+          if (content?.type === 'text' || content?.transcript) {
+            const text = content.text || content.transcript || '[Audio output]';
+            addToTranscript('assistant', text);
+          }
+        }
+      } else if (msg.type === 'response.audio_transcript.done') {
+        const transcript = (msg as any).transcript;
+        if (transcript) {
+          addToTranscript('assistant', transcript);
+        }
+      } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
+        const transcript = (msg as any).transcript;
+        if (transcript) {
+          addToTranscript('user', transcript);
         }
       } else if (msg.type === 'response.function_call_arguments.done') {
         // Handle function call
@@ -305,9 +624,16 @@ async function connect(): Promise<void> {
 
           // Call backend
           try {
+            const sendHeaders: Record<string, string> = {
+              'Content-Type': 'application/json'
+            };
+            if (authToken) {
+              sendHeaders['Authorization'] = `Bearer ${authToken}`;
+            }
+
             const response = await fetch('/api/send', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: sendHeaders,
               body: JSON.stringify({
                 message: params.message,
                 sessionId
@@ -315,6 +641,10 @@ async function connect(): Promise<void> {
             });
             const { taskId } = await response.json() as SendResponse;
             log(`Task queued: ${taskId}`, 'success');
+
+            // Add task to tracker
+            addTask(taskId, params.message);
+            addToTranscript('system', `Task queued: ${params.message}`);
 
             // Send function result back to OpenAI
             dc!.send(JSON.stringify({
@@ -378,10 +708,15 @@ function disconnect(): void {
   setStatus('', 'Disconnected');
   connectBtn.disabled = false;
   disconnectBtn.disabled = true;
+  muteBtn.disabled = true;
+  isMuted = false;
+  muteBtn.classList.remove('muted');
 }
 
 // Cleanup function
 function cleanup(): void {
+  stopVisualization();
+
   if (dc) {
     dc.close();
     dc = null;
@@ -394,6 +729,8 @@ function cleanup(): void {
     ws.close();
     ws = null;
   }
+
+  currentResponseId = null;
 }
 
 // Attach event listeners
@@ -402,3 +739,6 @@ disconnectBtn.addEventListener('click', disconnect);
 
 // Initial log
 log('Ready to connect', 'info');
+
+// Initialize task status display
+renderTaskStatus();
