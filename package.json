@@ -1,0 +1,19 @@
+{
+  "name": "openclaw-realtime-voice",
+  "version": "1.0.0",
+  "description": "OpenClaw Realtime Voice Interface - Phase 1 Prototype",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": ["openclaw", "realtime", "voice", "openai"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "dotenv": "^16.4.1"
+  }
+}
