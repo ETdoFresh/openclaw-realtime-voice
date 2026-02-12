@@ -1,5 +1,5 @@
-import express from 'express';
-import { WebSocketServer } from 'ws';
+import express, { Request, Response } from 'express';
+import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -15,23 +15,29 @@ const PORT = process.env.PORT || 3000;
 
 // Middleware
 app.use(express.json());
-app.use(express.static(join(__dirname, 'public')));
 
-// Store for active sessions and pending tasks
-const sessions = new Map();
-const pendingTasks = new Map();
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(join(__dirname, '../dist/public')));
+}
+
+// Store for active sessions
+const sessions = new Map<string, WebSocket>();
 
 // Create HTTP server
 const server = createServer(app);
 
-// Create WebSocket server
-const wss = new WebSocketServer({ server });
+// Create WebSocket server on /ws path
+const wss = new WebSocketServer({
+  server,
+  path: '/ws'
+});
 
 // WebSocket connection handling
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws: WebSocket, _req) => {
   console.log('WebSocket client connected');
 
-  ws.on('message', (message) => {
+  ws.on('message', (message: Buffer) => {
     try {
       const data = JSON.parse(message.toString());
       if (data.type === 'register' && data.sessionId) {
@@ -57,13 +63,24 @@ wss.on('connection', (ws, req) => {
 
 // Routes
 
-// Serve the main page
-app.get('/', (req, res) => {
-  res.sendFile(join(__dirname, 'public', 'index.html'));
+// Serve the main page in production
+app.get('/', (_req: Request, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    res.sendFile(join(__dirname, '../dist/public', 'index.html'));
+  } else {
+    res.json({ message: 'Server running. Use Vite dev server for development.' });
+  }
 });
 
+interface TokenResponse {
+  client_secret: {
+    value: string;
+    expires_at: number;
+  };
+}
+
 // Generate OpenAI ephemeral client token
-app.post('/api/token', async (req, res) => {
+app.post('/api/token', async (_req: Request, res: Response) => {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -88,7 +105,7 @@ app.post('/api/token', async (req, res) => {
       return res.status(response.status).json({ error: 'Failed to generate token' });
     }
 
-    const data = await response.json();
+    const data = await response.json() as TokenResponse;
     res.json({ token: data.client_secret.value });
   } catch (error) {
     console.error('Error generating token:', error);
@@ -96,8 +113,13 @@ app.post('/api/token', async (req, res) => {
   }
 });
 
+interface SendRequest {
+  message: string;
+  sessionId: string;
+}
+
 // Receive messages from voice agent (mock implementation)
-app.post('/api/send', async (req, res) => {
+app.post('/api/send', async (req: Request<{}, {}, SendRequest>, res: Response) => {
   const { message, sessionId } = req.body;
 
   if (!message || !sessionId) {
@@ -112,7 +134,7 @@ app.post('/api/send', async (req, res) => {
   // Mock: After 2 seconds, send the result back via WebSocket
   setTimeout(() => {
     const ws = sessions.get(sessionId);
-    if (ws && ws.readyState === ws.OPEN) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
       const result = {
         type: 'result',
         taskId,

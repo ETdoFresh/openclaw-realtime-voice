@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "description": "OpenClaw Realtime Voice Interface - Phase 1 Prototype",
   "type": "module",
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsx watch server/index.ts",
+    "dev:client": "vite",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "vite build",
+    "build:server": "tsc -p server/tsconfig.json",
+    "start": "NODE_ENV=production node server/dist/index.js",
+    "preview": "vite preview"
   },
   "keywords": ["openclaw", "realtime", "voice", "openai"],
   "author": "",
@@ -15,5 +20,14 @@
     "express": "^4.18.2",
     "ws": "^8.16.0",
     "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.11.5",
+    "@types/ws": "^8.5.10",
+    "concurrently": "^8.2.2",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12"
   }
 }
