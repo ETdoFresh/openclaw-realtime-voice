@@ -17,6 +17,11 @@ const SESSION_KEY = process.env.OPENCLAW_SESSION_KEY || 'realtime-voice:ET';
 const GATEWAY_TIMEOUT = 30000; // 30 seconds timeout for responses
 const RECONNECT_DELAY = 5000; // 5 seconds between reconnection attempts
 
+// Production Configuration
+const VOICE_AUTH_TOKEN = process.env.VOICE_AUTH_TOKEN || '';
+const RATE_LIMIT_MAX = 30; // Max requests per minute
+const RATE_LIMIT_WINDOW = 60000; // 1 minute in milliseconds
+
 // Server state (module-level for lifecycle management)
 let server: HTTPServer | null = null;
 let wss: WebSocketServer | null = null;
@@ -34,6 +39,22 @@ interface PendingRequest {
   timeout: NodeJS.Timeout;
 }
 const pendingRequests = new Map<string, PendingRequest>();
+
+// Rate limiting: Track requests per IP
+interface RateLimitEntry {
+  count: number;
+  resetTime: number;
+}
+const rateLimitMap = new Map<string, RateLimitEntry>();
+
+// Cost tracking: Track OpenAI Realtime session durations
+interface SessionCostTracking {
+  startTime: number;
+  endTime?: number;
+  durationMs?: number;
+}
+const sessionCostTracking = new Map<string, SessionCostTracking>();
+let totalSessionDurationMs = 0;
 
 // Gateway WebSocket connection management
 function connectToGateway(): void {
@@ -194,6 +215,69 @@ async function sendToGateway(message: string): Promise<string> {
   });
 }
 
+// Authentication middleware
+function authMiddleware(req: Request, res: Response, next: Function): void {
+  // Skip auth if no token configured (development mode)
+  if (!VOICE_AUTH_TOKEN) {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Unauthorized: Missing or invalid token' });
+    return;
+  }
+
+  const token = authHeader.substring(7);
+  if (token !== VOICE_AUTH_TOKEN) {
+    res.status(401).json({ error: 'Unauthorized: Invalid token' });
+    return;
+  }
+
+  next();
+}
+
+// Rate limiting middleware
+function rateLimitMiddleware(req: Request, res: Response, next: Function): void {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+
+  let entry = rateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetTime) {
+    // Create new entry or reset expired entry
+    entry = {
+      count: 1,
+      resetTime: now + RATE_LIMIT_WINDOW
+    };
+    rateLimitMap.set(ip, entry);
+    return next();
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) {
+    const resetIn = Math.ceil((entry.resetTime - now) / 1000);
+    res.status(429).json({
+      error: 'Too many requests',
+      message: `Rate limit exceeded. Try again in ${resetIn} seconds.`,
+      retryAfter: resetIn
+    });
+    return;
+  }
+
+  entry.count++;
+  next();
+}
+
+// Clean up old rate limit entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of rateLimitMap.entries()) {
+    if (now > entry.resetTime) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, RATE_LIMIT_WINDOW);
+
 // Create Express app
 function createApp() {
   const app = express();
@@ -216,6 +300,44 @@ function createApp() {
     });
   });
 
+  // Stats endpoint for cost tracking
+  app.get('/api/stats', authMiddleware, (_req: Request, res: Response) => {
+    const now = Date.now();
+    const activeSessions: any[] = [];
+    const completedSessions: any[] = [];
+
+    for (const [sessionId, tracking] of sessionCostTracking.entries()) {
+      const sessionData = {
+        sessionId,
+        startTime: new Date(tracking.startTime).toISOString(),
+        durationMs: tracking.durationMs || (now - tracking.startTime),
+        durationMinutes: ((tracking.durationMs || (now - tracking.startTime)) / 60000).toFixed(2),
+        status: tracking.endTime ? 'completed' : 'active'
+      };
+
+      if (tracking.endTime) {
+        completedSessions.push(sessionData);
+      } else {
+        activeSessions.push(sessionData);
+      }
+    }
+
+    const totalDurationMinutes = (totalSessionDurationMs / 60000).toFixed(2);
+    const estimatedCostUSD = (parseFloat(totalDurationMinutes) * (4.0 / 60)).toFixed(2); // $4/hour
+
+    res.json({
+      activeSessions: activeSessions.length,
+      completedSessions: completedSessions.length,
+      totalSessionDurationMs,
+      totalDurationMinutes,
+      estimatedCostUSD: `$${estimatedCostUSD}`,
+      sessions: {
+        active: activeSessions,
+        completed: completedSessions.slice(-10) // Last 10 completed sessions
+      }
+    });
+  });
+
   // Serve the main page in production
   app.get('/', (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === 'production') {
@@ -233,7 +355,7 @@ function createApp() {
   }
 
   // Generate OpenAI ephemeral client token
-  app.post('/api/token', async (req: Request, res: Response) => {
+  app.post('/api/token', authMiddleware, async (req: Request, res: Response) => {
     try {
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) {
@@ -261,7 +383,17 @@ function createApp() {
       }
 
       const data = await response.json() as TokenResponse;
-      res.json({ token: data.client_secret.value });
+
+      // Track session start for cost calculation
+      const sessionId = `token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      sessionCostTracking.set(sessionId, {
+        startTime: Date.now()
+      });
+
+      res.json({
+        token: data.client_secret.value,
+        sessionId
+      });
     } catch (error) {
       console.error('Error generating token:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -274,7 +406,7 @@ function createApp() {
   }
 
   // Receive messages from voice agent and forward to OpenClaw gateway
-  app.post('/api/send', async (req: Request<{}, {}, SendRequest>, res: Response) => {
+  app.post('/api/send', authMiddleware, rateLimitMiddleware, async (req: Request<{}, {}, SendRequest>, res: Response) => {
     const { message, sessionId } = req.body;
 
     if (!message || !sessionId) {
@@ -374,6 +506,15 @@ export async function start(port?: number): Promise<void> {
         if (socket === ws) {
           sessions.delete(sessionId);
           console.log(`Session ${sessionId} disconnected`);
+
+          // Track session end time for cost calculation
+          const tracking = sessionCostTracking.get(sessionId);
+          if (tracking && !tracking.endTime) {
+            tracking.endTime = Date.now();
+            tracking.durationMs = tracking.endTime - tracking.startTime;
+            totalSessionDurationMs += tracking.durationMs;
+            console.log(`Session ${sessionId} duration: ${(tracking.durationMs / 60000).toFixed(2)} minutes`);
+          }
           break;
         }
       }
