@@ -80,14 +80,16 @@ interface TokenResponse {
 }
 
 // Generate OpenAI ephemeral client token
-app.post('/api/token', async (_req: Request, res: Response) => {
+app.post('/api/token', async (req: Request, res: Response) => {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return res.status(500).json({ error: 'OPENAI_API_KEY not configured' });
     }
 
-    const response = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
+    const voice = req.body?.voice || 'coral';
+
+    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -95,7 +97,7 @@ app.post('/api/token', async (_req: Request, res: Response) => {
       },
       body: JSON.stringify({
         model: 'gpt-4o-realtime-preview',
-        voice: 'verse'
+        voice
       })
     });
 

@@ -48,8 +48,17 @@ interface DataChannelMessage {
   arguments?: string;
 }
 
+// Speed labels and prompt instructions
+const SPEED_OPTIONS = [
+  { label: 'Very Slow', instruction: 'SPEAKING PACE: Speak very slowly and deliberately, with long pauses between sentences.' },
+  { label: 'Slow', instruction: 'SPEAKING PACE: Speak at a slower-than-normal pace. Take your time with each sentence.' },
+  { label: 'Normal', instruction: '' },
+  { label: 'Fast', instruction: 'SPEAKING PACE: Speak quickly and efficiently. Keep a brisk pace.' },
+  { label: 'Very Fast', instruction: 'SPEAKING PACE: Speak as fast as possible while remaining clear. Be extremely concise and rapid.' },
+];
+
 // System prompt from architecture.md
-const SYSTEM_PROMPT = `You are a voice interface for OpenClaw, an AI assistant system.
+const BASE_SYSTEM_PROMPT = `You are a voice interface for OpenClaw, an AI assistant system.
 Your role is to have natural, real-time voice conversations.
 
 BEHAVIOR:
@@ -82,6 +91,12 @@ CONTEXT:
   file system, memory, cron/reminders, and more
 - You don't have direct access to these — delegate via send_to_openclaw()`;
 
+function getSystemPrompt(speedIndex: number): string {
+  const speedInstruction = SPEED_OPTIONS[speedIndex].instruction;
+  if (!speedInstruction) return BASE_SYSTEM_PROMPT;
+  return `${BASE_SYSTEM_PROMPT}\n\n${speedInstruction}`;
+}
+
 // Tool definition
 const TOOL_DEFINITION = {
   type: "function",
@@ -111,6 +126,14 @@ const statusText = document.getElementById('statusText') as HTMLDivElement;
 const logDiv = document.getElementById('log') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const disconnectBtn = document.getElementById('disconnectBtn') as HTMLButtonElement;
+const voiceSelect = document.getElementById('voiceSelect') as HTMLSelectElement;
+const speedRange = document.getElementById('speedRange') as HTMLInputElement;
+const speedLabel = document.getElementById('speedLabel') as HTMLSpanElement;
+
+// Speed slider label updates
+speedRange.addEventListener('input', () => {
+  speedLabel.textContent = SPEED_OPTIONS[Number(speedRange.value)].label;
+});
 
 // Logging function
 function log(message: string, type: 'info' | 'success' | 'error' | 'task' = 'info'): void {
@@ -135,8 +158,17 @@ async function connect(): Promise<void> {
     setStatus('connecting', 'Connecting...');
     connectBtn.disabled = true;
 
+    // Read selected settings
+    const selectedVoice = voiceSelect.value;
+    const selectedSpeed = Number(speedRange.value);
+    log(`Voice: ${selectedVoice}, Speed: ${SPEED_OPTIONS[selectedSpeed].label}`, 'info');
+
     // Fetch ephemeral token
-    const tokenResponse = await fetch('/api/token', { method: 'POST' });
+    const tokenResponse = await fetch('/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ voice: selectedVoice })
+    });
     if (!tokenResponse.ok) {
       throw new Error('Failed to get token');
     }
@@ -208,9 +240,9 @@ async function connect(): Promise<void> {
       const sessionUpdate: RTCSessionEvent = {
         type: 'session.update',
         session: {
-          instructions: SYSTEM_PROMPT,
+          instructions: getSystemPrompt(selectedSpeed),
           modalities: ['audio', 'text'],
-          voice: 'verse',
+          voice: selectedVoice,
           input_audio_format: 'pcm16',
           output_audio_format: 'pcm16',
           turn_detection: {
@@ -286,7 +318,7 @@ async function connect(): Promise<void> {
     await pc.setLocalDescription(offer);
 
     // Send offer to OpenAI
-    const sdpResponse = await fetch('https://api.openai.com/v1/realtime', {
+    const sdpResponse = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

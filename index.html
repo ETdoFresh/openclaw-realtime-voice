@@ -15,6 +15,29 @@
       <div class="status-text" id="statusText">Disconnected</div>
     </div>
 
+    <div class="settings">
+      <div class="setting-row">
+        <label for="voiceSelect">Voice</label>
+        <select id="voiceSelect">
+          <option value="alloy">Alloy</option>
+          <option value="ash">Ash</option>
+          <option value="ballad">Ballad</option>
+          <option value="cedar">Cedar</option>
+          <option value="coral" selected>Coral</option>
+          <option value="marin">Marin</option>
+          <option value="sage">Sage</option>
+          <option value="verse">Verse</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="speedRange">Speed</label>
+        <div class="speed-control">
+          <input type="range" id="speedRange" min="0" max="4" step="1" value="2">
+          <span id="speedLabel">Normal</span>
+        </div>
+      </div>
+    </div>
+
     <div class="controls">
       <button class="btn-connect" id="connectBtn">Connect</button>
       <button class="btn-disconnect" id="disconnectBtn" disabled>Disconnect</button>
