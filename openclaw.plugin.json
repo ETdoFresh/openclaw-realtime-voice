@@ -1,0 +1,28 @@
+{
+  "name": "realtime-voice",
+  "version": "1.0.0",
+  "description": "Browser-based real-time voice interface for OpenClaw",
+  "entry": "server/index.ts",
+  "config": {
+    "port": {
+      "type": "number",
+      "default": 3335,
+      "description": "HTTP server port"
+    },
+    "model": {
+      "type": "string",
+      "default": "gpt-4o-realtime-preview",
+      "description": "OpenAI realtime model"
+    },
+    "voice": {
+      "type": "string",
+      "default": "coral",
+      "description": "Default voice"
+    },
+    "bind": {
+      "type": "string",
+      "default": "127.0.0.1",
+      "description": "Bind address"
+    }
+  }
+}
