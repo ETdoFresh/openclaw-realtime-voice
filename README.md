@@ -1,6 +1,6 @@
 # OpenClaw Realtime Voice - Phase 1 Prototype
 
-A standalone prototype for the OpenClaw realtime voice interface using OpenAI's Realtime API.
+A standalone prototype for the OpenClaw realtime voice interface using OpenAI's Realtime API, built with TypeScript and Vite.
 
 ## Overview
 
@@ -28,6 +28,8 @@ OpenClaw Agent (Claude)
 - **Function Calling**: Voice agent can call `send_to_openclaw()` to delegate tasks
 - **Async Results**: Results pushed back via WebSocket and spoken by the voice agent
 - **Clean UI**: Minimal dark theme with connection status and activity log
+- **TypeScript**: Full TypeScript support for both frontend and backend
+- **Vite**: Fast frontend development with HMR (Hot Module Replacement)
 
 ## Setup
 
@@ -62,14 +64,38 @@ OpenClaw Agent (Claude)
 
 ## Running the Prototype
 
-Start the server:
-```bash
-npm start
-```
+### Development Mode
 
-Or for development with auto-reload:
+Start both the backend server and Vite dev server with HMR:
 ```bash
 npm run dev
+```
+
+This will start:
+- Backend server on `http://localhost:3000` (API endpoints and WebSocket)
+- Vite dev server on `http://localhost:5173` (frontend with HMR)
+
+Open your browser to:
+```
+http://localhost:5173
+```
+
+The Vite dev server automatically proxies `/api` and `/ws` requests to the backend server.
+
+### Production Build
+
+Build both frontend and backend:
+```bash
+npm run build
+```
+
+This will:
+- Build the frontend to `dist/public/`
+- Compile the TypeScript backend to `server/dist/`
+
+Start the production server:
+```bash
+npm start
 ```
 
 Open your browser to:
@@ -169,12 +195,18 @@ WebSocket connection for receiving async results.
 
 ```
 .
-├── server.js              # Express + WebSocket server
+├── server/
+│   ├── index.ts           # Express + WebSocket server (TypeScript)
+│   └── tsconfig.json      # TypeScript config for server
+├── src/
+│   ├── main.ts            # Frontend entry point (TypeScript)
+│   └── style.css          # Frontend styles
+├── index.html             # HTML entry point (Vite)
+├── vite.config.ts         # Vite configuration
+├── tsconfig.json          # TypeScript config for frontend
 ├── package.json           # Dependencies and scripts
 ├── .env                   # Environment variables (not in git)
 ├── .env.example           # Template for .env
-├── public/
-│   └── index.html         # Voice chat UI (single page app)
 ├── README.md              # This file
 ├── PLAN.md                # Full implementation plan
 └── architecture.md        # Architecture diagrams and flows

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenClaw Realtime Voice</title>
+</head>
+<body>
+  <div class="container">
+    <h1>OpenClaw Realtime Voice</h1>
+    <div class="subtitle">Phase 1 Prototype - WebRTC Voice Interface</div>
+
+    <div class="status">
+      <div class="status-indicator" id="statusIndicator"></div>
+      <div class="status-text" id="statusText">Disconnected</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn-connect" id="connectBtn">Connect</button>
+      <button class="btn-disconnect" id="disconnectBtn" disabled>Disconnect</button>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <div class="footer">
+      Phase 1: Voice ↔ Mock Backend. Full OpenClaw integration in Phase 2.
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
