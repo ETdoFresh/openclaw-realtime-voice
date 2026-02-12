@@ -1,8 +1,9 @@
 {
   "name": "openclaw-realtime-voice",
   "version": "1.0.0",
-  "description": "OpenClaw Realtime Voice Interface - Phase 1 Prototype",
+  "description": "Browser-based real-time voice interface for OpenClaw using OpenAI Realtime API",
   "type": "module",
+  "main": "server/dist/index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch server/index.ts",
@@ -13,9 +14,21 @@
     "start": "NODE_ENV=production node server/dist/index.js",
     "preview": "vite preview"
   },
-  "keywords": ["openclaw", "realtime", "voice", "openai"],
-  "author": "",
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "realtime",
+    "voice",
+    "openai",
+    "webrtc",
+    "voice-interface"
+  ],
+  "author": "ETdoFresh",
   "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ETdoFresh/openclaw-realtime-voice"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "ws": "^8.16.0",
