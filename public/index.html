@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>OpenClaw Realtime Voice</title>
+  <title>OpenClaw Voice Room</title>
 </head>
 <body>
   <!-- Auth overlay -->
@@ -19,8 +19,8 @@
 
   <div class="main-layout">
     <div class="container">
-      <h1>OpenClaw Realtime Voice</h1>
-      <div class="subtitle">Production-Ready Voice Interface</div>
+      <h1>OpenClaw Voice Room</h1>
+      <div class="subtitle">Multi-User Voice + AI Assistant — <span id="userCount">0</span> user(s) connected</div>
 
       <div class="status">
         <div class="status-indicator" id="statusIndicator"></div>
@@ -34,7 +34,7 @@
 
       <div class="settings">
         <div class="setting-row">
-          <label for="voiceSelect">Voice</label>
+          <label for="voiceSelect">AI Voice</label>
           <select id="voiceSelect">
             <option value="alloy">Alloy</option>
             <option value="ash">Ash</option>
@@ -62,9 +62,26 @@
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
             <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
           </svg>
+          <span>Mute</span>
         </button>
+        <button class="btn-ai-active" id="aiActiveBtn" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 12h8"/>
+          </svg>
+          <span>AI Off</span>
+        </button>
+        <button class="btn-ptt" id="pttBtn" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+          </svg>
+          <span>Talk to AI</span>
+        </button>
+      </div>
+
+      <div class="controls-secondary">
         <button class="btn-new-session" id="newSessionBtn" disabled>New Session</button>
-        <button class="btn-disconnect" id="disconnectBtn" disabled>Disconnect</button>
       </div>
 
       <!-- Task Status Area -->
@@ -80,7 +97,7 @@
       </button>
 
       <div class="footer">
-        Production-Ready: Voice + Task Management + OpenClaw Gateway
+        Multi-User Voice Room + AI Assistant + OpenClaw Gateway
       </div>
     </div>
 
@@ -96,35 +113,6 @@
         </button>
       </div>
       <div class="transcript-content" id="transcriptContent"></div>
-      <div class="transcript-actions-bar">
-        <button class="transcript-action-btn transcript-connect-btn" id="transcriptConnectBtn" aria-label="Connect">
-          <svg class="icon-connect" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          <span class="action-label connect-label">Connect</span>
-          <span class="action-label disconnect-label" style="display:none;">Stop</span>
-        </button>
-        <button class="transcript-action-btn transcript-ptt-btn" id="transcriptPttBtn" aria-label="Push to talk">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-          </svg>
-          <span class="action-label">Talk</span>
-        </button>
-        <button class="transcript-action-btn transcript-mute-btn" id="transcriptMuteBtn" aria-label="Toggle mute">
-          <svg class="mic-on" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-          </svg>
-          <svg class="mic-off" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
-            <path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28z"/>
-            <path d="M14.98 11.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99z"/>
-            <path d="M4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/>
-          </svg>
-          <span class="action-label mute-label">Mute</span>
-          <span class="action-label unmute-label" style="display:none;">Unmute</span>
-        </button>
-      </div>
     </div>
   </div>
 

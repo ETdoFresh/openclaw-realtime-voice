@@ -314,14 +314,22 @@ button:disabled {
   display: block;
 }
 
+/* Controls secondary row */
+.controls-secondary {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
 /* Mute Button */
 .btn-mute {
   background: #374151;
   color: white;
-  padding: 15px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
 }
 
 .btn-mute:hover:not(:disabled) {
@@ -337,6 +345,56 @@ button:disabled {
 .btn-mute.muted:hover:not(:disabled) {
   background: #ef4444;
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+/* AI Active Button */
+.btn-ai-active {
+  background: #374151;
+  color: white;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-ai-active:hover:not(:disabled) {
+  background: #4b5563;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(75, 85, 99, 0.4);
+}
+
+.btn-ai-active.active {
+  background: #16a34a;
+}
+
+.btn-ai-active.active:hover:not(:disabled) {
+  background: #22c55e;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+}
+
+/* Push-to-Talk Button */
+.btn-ptt {
+  background: #1e40af;
+  color: white;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.btn-ptt:hover:not(:disabled) {
+  background: #2563eb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
+.btn-ptt.active {
+  background: #16a34a;
+  box-shadow: 0 0 12px rgba(22, 163, 74, 0.5);
 }
 
 /* Task Status Area */
@@ -430,76 +488,7 @@ button:disabled {
   color: #e0e0e0;
 }
 
-/* Transcript Actions Bar */
-.transcript-actions-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 12px 20px;
-  border-top: 1px solid #333;
-  background: #111;
-}
-
-.transcript-action-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  background: #374151;
-  border: none;
-  color: white;
-  cursor: pointer;
-  padding: 10px 16px;
-  border-radius: 12px;
-  transition: background 0.2s;
-  flex: 1;
-  min-width: 0;
-}
-
-.transcript-action-btn:hover {
-  background: #4b5563;
-}
-
-.action-label {
-  font-size: 11px;
-  font-weight: 500;
-  opacity: 0.8;
-}
-
-.transcript-connect-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.transcript-connect-btn.connected {
-  background: #dc2626;
-}
-
-.transcript-connect-btn.connected:hover {
-  background: #ef4444;
-}
-
-.transcript-mute-btn.muted {
-  background: #dc2626;
-}
-
-.transcript-mute-btn.muted:hover {
-  background: #ef4444;
-}
-
-.transcript-ptt-btn {
-  background: #1e40af;
-}
-
-.transcript-ptt-btn:hover {
-  background: #2563eb;
-}
-
-.transcript-ptt-btn.active {
-  background: #16a34a;
-  box-shadow: 0 0 8px rgba(22, 163, 74, 0.5);
-}
+/* (transcript action bar removed - controls are in main area now) */
 
 .transcript-toggle {
   background: transparent;
@@ -769,27 +758,22 @@ button:disabled {
     font-size: 12px;
   }
 
-  /* Controls: 2-row grid layout */
+  /* Controls: 2x2 grid layout */
   .controls {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .controls .btn-connect {
-    grid-column: 1 / -1;
+    margin-bottom: 8px;
   }
 
   .controls button {
     padding: 12px 8px;
-    font-size: 14px;
+    font-size: 13px;
     width: 100%;
   }
 
-  .controls .btn-mute {
-    flex: none;
-    padding: 12px;
+  .controls-secondary {
+    margin-bottom: 12px;
   }
 
   /* Compact task status */
@@ -855,27 +839,7 @@ button:disabled {
     margin-bottom: 10px;
   }
 
-  /* Big bottom action bar for one-handed use */
-  .transcript-actions-bar {
-    padding: 16px 16px;
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
-    gap: 10px;
-  }
-
-  .transcript-action-btn {
-    padding: 14px 8px;
-    border-radius: 14px;
-    gap: 6px;
-  }
-
-  .transcript-action-btn svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  .action-label {
-    font-size: 12px;
-  }
+  /* (transcript action bar removed) */
 
   /* Auth card on mobile */
   .auth-card {
