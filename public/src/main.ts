@@ -763,6 +763,8 @@ checkAuth();
 // Show build time
 fetch('/api/health').then(r => r.json()).then(d => {
   const el = document.getElementById('buildTime');
-  if (el && d.buildTime && d.buildTime !== 'dev') el.textContent = `Built ${d.buildTime}`;
-  else if (el) el.textContent = 'dev build';
+  if (el && d.buildTime) {
+    const date = new Date(d.buildTime);
+    el.textContent = `Deployed ${date.toLocaleString()}`;
+  }
 }).catch(() => {});

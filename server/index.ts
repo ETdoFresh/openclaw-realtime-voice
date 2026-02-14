@@ -546,7 +546,7 @@ function createApp() {
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({
       status: 'ok',
-      buildTime: process.env.BUILD_TIME || 'dev',
+      buildTime: process.env.BUILD_TIME || new Date().toISOString(),
       gatewayConnected: gatewayWs !== null && gatewayWs.readyState === WebSocket.OPEN,
       openaiConnected: room.openaiWs !== null && room.openaiWs.readyState === WebSocket.OPEN,
       activeUsers: room.users.size,
