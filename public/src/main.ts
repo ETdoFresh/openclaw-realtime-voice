@@ -289,13 +289,14 @@ function setupAudioCapture(stream: MediaStream): void {
   const captureCtx = new AudioContext({ sampleRate: 24000 });
   audioSourceNode = captureCtx.createMediaStreamSource(stream);
 
-  // ScriptProcessor: 4096 samples buffer, mono in, mono out
-  audioWorkletNode = captureCtx.createScriptProcessor(4096, 1, 1);
+  // ScriptProcessor: 2048 samples buffer (~85ms at 24kHz) for lower latency
+  audioWorkletNode = captureCtx.createScriptProcessor(2048, 1, 1);
 
   audioWorkletNode.onaudioprocess = (e) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (isMuted) return; // overall mute blocks everything
-    if (isAiMuted && !isPttActive) return; // AI mute blocks AI unless PTT
+    if (isPttActive) { /* PTT supersedes all mute states */ }
+    else if (isMuted) return; // overall mute blocks everything
+    else if (isAiMuted) return; // AI mute blocks AI audio
 
     const inputData = e.inputBuffer.getChannelData(0);
     // Convert float32 to PCM16
@@ -660,6 +661,10 @@ function pttStart(): void {
   isPttActive = true;
   pttBtn.classList.add('active');
   transcriptPttBtn.classList.add('active');
+  // PTT supersedes mute - temporarily enable mic track
+  if (isMuted && localStream) {
+    localStream.getAudioTracks().forEach(t => t.enabled = true);
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'ptt-start' }));
   }
@@ -671,6 +676,10 @@ function pttEnd(): void {
   isPttActive = false;
   pttBtn.classList.remove('active');
   transcriptPttBtn.classList.remove('active');
+  // Restore mute state after PTT
+  if (isMuted && localStream) {
+    localStream.getAudioTracks().forEach(t => t.enabled = false);
+  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'ptt-stop' }));
   }
