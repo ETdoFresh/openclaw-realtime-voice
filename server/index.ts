@@ -64,6 +64,13 @@ interface SessionCostTracking {
 const sessionCostTracking = new Map<string, SessionCostTracking>();
 let totalSessionDurationMs = 0;
 
+// Log startup configuration
+console.log('Configuration:');
+console.log(`  GATEWAY_URL: ${GATEWAY_URL}`);
+console.log(`  GATEWAY_TOKEN: ${GATEWAY_TOKEN ? `${GATEWAY_TOKEN.slice(0, 4)}...${GATEWAY_TOKEN.slice(-4)}` : '(not set)'}`);
+console.log(`  SESSION_KEY: ${SESSION_KEY}`);
+console.log(`  OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.slice(0, 7)}...${process.env.OPENAI_API_KEY.slice(-4)}` : '(not set)'}`);
+
 // Gateway WebSocket connection management
 function connectToGateway(): void {
   if (isConnecting || (gatewayWs && gatewayWs.readyState === WebSocket.OPEN)) {
