@@ -99,6 +99,160 @@ function getSystemPrompt(speedIndex: number): string {
   return `${BASE_SYSTEM_PROMPT}\n\n${speedInstruction}`;
 }
 
+// ── Background Listening ──────────────────────────────────────────────
+// Silent audio keepalive: plays a near-silent audio loop to prevent the
+// browser from suspending the tab when it's in the background.
+function createSilentAudio(): HTMLAudioElement {
+  // Generate a tiny WAV file (1 sample of silence, looped)
+  // 44-byte WAV header + 2 bytes of PCM silence = 46 bytes
+  const sampleRate = 8000;
+  const numSamples = sampleRate; // 1 second of silence
+  const dataSize = numSamples * 2; // 16-bit = 2 bytes per sample
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  // WAV header
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true); // chunk size
+  view.setUint16(20, 1, true);  // PCM
+  view.setUint16(22, 1, true);  // mono
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true); // byte rate
+  view.setUint16(32, 2, true);  // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+  // PCM data is all zeros (silence) — ArrayBuffer is zero-initialized
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  audio.loop = true;
+  audio.volume = 0.01; // near-silent
+  return audio;
+}
+
+async function acquireWakeLock(): Promise<void> {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel.addEventListener('release', () => {
+      log('Wake lock released', 'info');
+      // Re-acquire if still in background mode
+      if (backgroundMode && pc) {
+        acquireWakeLock();
+      }
+    });
+    log('Wake lock acquired', 'success');
+  } catch {
+    log('Wake lock unavailable', 'info');
+  }
+}
+
+function releaseWakeLock(): void {
+  if (wakeLockSentinel) {
+    wakeLockSentinel.release();
+    wakeLockSentinel = null;
+  }
+}
+
+function startSilentAudio(): void {
+  if (silentAudioEl) return;
+  silentAudioEl = createSilentAudio();
+  silentAudioEl.play().catch(() => {
+    log('Silent audio autoplay blocked — tap the page to enable background mode', 'info');
+  });
+}
+
+function stopSilentAudio(): void {
+  if (silentAudioEl) {
+    silentAudioEl.pause();
+    if (silentAudioEl.src.startsWith('blob:')) {
+      URL.revokeObjectURL(silentAudioEl.src);
+    }
+    silentAudioEl = null;
+  }
+}
+
+function enableBackgroundMode(): void {
+  if (backgroundMode) return;
+  backgroundMode = true;
+  startSilentAudio();
+  acquireWakeLock();
+  log('Background listening enabled', 'success');
+  updateBackgroundBtn();
+}
+
+function disableBackgroundMode(): void {
+  if (!backgroundMode) return;
+  backgroundMode = false;
+  stopSilentAudio();
+  releaseWakeLock();
+  cancelReconnect();
+  log('Background listening disabled', 'info');
+  updateBackgroundBtn();
+}
+
+function toggleBackgroundMode(): void {
+  if (backgroundMode) {
+    disableBackgroundMode();
+  } else {
+    enableBackgroundMode();
+  }
+}
+
+function updateBackgroundBtn(): void {
+  const btn = document.getElementById('backgroundBtn') as HTMLButtonElement | null;
+  if (!btn) return;
+  btn.classList.toggle('active', backgroundMode);
+  const label = btn.querySelector('.bg-label');
+  if (label) label.textContent = backgroundMode ? 'BG On' : 'BG Off';
+}
+
+// Auto-reconnect logic for background mode
+function scheduleReconnect(): void {
+  if (!backgroundMode || reconnectTimer) return;
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    log(`Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached — giving up`, 'error');
+    disableBackgroundMode();
+    return;
+  }
+  const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, Math.min(reconnectAttempts, 5));
+  reconnectAttempts++;
+  log(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`, 'info');
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    if (!backgroundMode) return;
+    try {
+      await connect();
+      reconnectAttempts = 0; // reset on success
+    } catch {
+      scheduleReconnect();
+    }
+  }, delay);
+}
+
+function cancelReconnect(): void {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectAttempts = 0;
+}
+
+// Re-acquire wake lock when tab becomes visible again (browsers release it on hide)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && backgroundMode && pc) {
+    acquireWakeLock();
+  }
+});
+
 // Tool definition
 const TOOL_DEFINITION = {
   type: "function",
@@ -127,6 +281,15 @@ let microphone: MediaStreamAudioSourceNode | null = null;
 let animationFrameId: number | null = null;
 let isMuted = true;
 let currentResponseId: string | null = null;
+
+// Background listening state
+let backgroundMode = false;
+let wakeLockSentinel: WakeLockSentinel | null = null;
+let silentAudioEl: HTMLAudioElement | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const RECONNECT_BASE_DELAY_MS = 2000;
 
 // Speech-aware result queue: buffer results while user is speaking
 let userSpeaking = false;
@@ -254,6 +417,10 @@ const showTranscriptBtn = document.getElementById('showTranscriptBtn') as HTMLBu
 const transcriptMuteBtn = document.getElementById('transcriptMuteBtn') as HTMLButtonElement;
 const transcriptPttBtn = document.getElementById('transcriptPttBtn') as HTMLButtonElement;
 const transcriptConnectBtn = document.getElementById('transcriptConnectBtn') as HTMLButtonElement;
+const backgroundBtn = document.getElementById('backgroundBtn') as HTMLButtonElement;
+
+// Background mode button
+backgroundBtn.addEventListener('click', toggleBackgroundMode);
 
 // Speed slider label updates
 speedRange.addEventListener('input', () => {
@@ -931,18 +1098,39 @@ async function connect(): Promise<void> {
 
     log('Connected to OpenAI Realtime API', 'success');
 
+    // Monitor connection state for auto-reconnect
+    pc.onconnectionstatechange = () => {
+      if (pc?.connectionState === 'disconnected' || pc?.connectionState === 'failed') {
+        log(`WebRTC connection ${pc.connectionState}`, 'error');
+        setStatus('', 'Disconnected');
+        cleanup();
+        updateTranscriptConnectBtn(false);
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        muteBtn.disabled = true;
+        newSessionBtn.disabled = true;
+        if (backgroundMode) {
+          scheduleReconnect();
+        }
+      }
+    };
+
   } catch (error) {
     log(`Connection error: ${(error as Error).message}`, 'error');
     setStatus('', 'Disconnected');
     connectBtn.disabled = false;
     cleanup();
     updateTranscriptConnectBtn(false);
+    if (backgroundMode) {
+      scheduleReconnect();
+    }
   }
 }
 
 // Disconnect function
 function disconnect(): void {
   log('Disconnecting...', 'info');
+  cancelReconnect(); // Don't auto-reconnect on explicit disconnect
   cleanup();
   setStatus('', 'Disconnected');
   connectBtn.disabled = false;
