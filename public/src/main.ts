@@ -128,9 +128,82 @@ let animationFrameId: number | null = null;
 let isMuted = false;
 let currentResponseId: string | null = null;
 
-// Optional auth token (set in sessionStorage or prompt user)
-// For production, this should be obtained from your auth system
-const authToken = sessionStorage.getItem('voiceAuthToken') || '';
+// Auth token from sessionStorage
+let authToken = sessionStorage.getItem('voiceAuthToken') || '';
+
+// Auth overlay elements
+const authOverlay = document.getElementById('authOverlay') as HTMLDivElement;
+const authInput = document.getElementById('authInput') as HTMLInputElement;
+const authSubmitBtn = document.getElementById('authSubmitBtn') as HTMLButtonElement;
+const authError = document.getElementById('authError') as HTMLDivElement;
+
+// Auth functions
+async function checkAuth(): Promise<void> {
+  try {
+    const res = await fetch('/api/auth/status');
+    const { authRequired } = await res.json();
+
+    if (!authRequired) {
+      // No auth configured on server — skip login
+      authOverlay.style.display = 'none';
+      return;
+    }
+
+    // Auth is required — check if stored token is valid
+    if (authToken) {
+      const verifyRes = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (verifyRes.ok) {
+        authOverlay.style.display = 'none';
+        return;
+      }
+      // Token invalid — clear it
+      sessionStorage.removeItem('voiceAuthToken');
+      authToken = '';
+    }
+
+    // Show login overlay
+    authOverlay.style.display = 'flex';
+  } catch {
+    // Can't reach server — hide overlay, will fail on actual API calls
+    authOverlay.style.display = 'none';
+  }
+}
+
+async function submitAuth(): Promise<void> {
+  const token = authInput.value.trim();
+  if (!token) return;
+
+  authSubmitBtn.disabled = true;
+  authError.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/auth/verify', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (res.ok) {
+      authToken = token;
+      sessionStorage.setItem('voiceAuthToken', token);
+      authOverlay.style.display = 'none';
+    } else {
+      authError.style.display = 'block';
+    }
+  } catch {
+    authError.textContent = 'Connection error';
+    authError.style.display = 'block';
+  }
+
+  authSubmitBtn.disabled = false;
+}
+
+authSubmitBtn.addEventListener('click', submitAuth);
+authInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitAuth();
+});
 
 // Task tracking
 interface Task {
@@ -778,3 +851,6 @@ log('Ready to connect', 'info');
 
 // Initialize task status display
 renderTaskStatus();
+
+// Check auth on page load
+checkAuth();

@@ -6,6 +6,17 @@
   <title>OpenClaw Realtime Voice</title>
 </head>
 <body>
+  <!-- Auth overlay -->
+  <div class="auth-overlay" id="authOverlay" style="display: none;">
+    <div class="auth-card">
+      <h2>OpenClaw Voice</h2>
+      <p>Enter access token to continue</p>
+      <input type="password" id="authInput" placeholder="Access token" autocomplete="off" />
+      <button id="authSubmitBtn">Sign In</button>
+      <div class="auth-error" id="authError" style="display: none;">Invalid token</div>
+    </div>
+  </div>
+
   <div class="main-layout">
     <div class="container">
       <h1>OpenClaw Realtime Voice</h1>

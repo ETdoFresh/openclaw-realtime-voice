@@ -17,6 +17,14 @@ const SESSION_KEY = process.env.OPENCLAW_SESSION_KEY || 'realtime-voice:ET';
 const GATEWAY_TIMEOUT = 30000; // 30 seconds timeout for responses
 const RECONNECT_DELAY = 5000; // 5 seconds between reconnection attempts
 
+// Session key with suffix — incrementing suffix creates a fresh conversation
+let sessionKeySuffix = 0;
+function getSessionKey(): string {
+  return sessionKeySuffix === 0
+    ? SESSION_KEY
+    : `${SESSION_KEY}:${sessionKeySuffix}`;
+}
+
 // Production Configuration
 const VOICE_AUTH_TOKEN = process.env.VOICE_AUTH_TOKEN || '';
 const RATE_LIMIT_MAX = 30; // Max requests per minute
@@ -216,7 +224,7 @@ function handleGatewayMessage(message: any): void {
     // If we don't have a tracked run but the sessionKey matches ours,
     // create an ad-hoc entry (handles subagent runs spawned by the gateway)
     if (!run && sessionKey) {
-      const normalizedKey = `agent:main:${SESSION_KEY.toLowerCase()}`;
+      const normalizedKey = `agent:main:${getSessionKey().toLowerCase()}`;
       if (sessionKey === normalizedKey && stream === 'lifecycle' && data?.phase === 'start') {
         // Find the most recent client session to forward results to
         const lastSessionId = Array.from(sessions.keys()).pop();
@@ -312,7 +320,7 @@ async function sendToGateway(message: string, requestId?: string): Promise<strin
       id: requestId,
       method: 'chat.send',
       params: {
-        sessionKey: SESSION_KEY,
+        sessionKey: getSessionKey(),
         message: message,
         idempotencyKey: requestId
       }
@@ -401,6 +409,31 @@ function createApp() {
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(join(__dirname, '../../dist/public')));
   }
+
+  // Auth verification endpoint — lets the frontend check if a token is valid
+  app.post('/api/auth/verify', (req: Request, res: Response) => {
+    // If no token is configured, auth is disabled
+    if (!VOICE_AUTH_TOKEN) {
+      return res.json({ authenticated: true, authRequired: false });
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ authenticated: false, authRequired: true });
+    }
+
+    const token = authHeader.substring(7);
+    if (token !== VOICE_AUTH_TOKEN) {
+      return res.status(401).json({ authenticated: false, authRequired: true });
+    }
+
+    res.json({ authenticated: true, authRequired: true });
+  });
+
+  // Check if auth is required (no token needed for this endpoint)
+  app.get('/api/auth/status', (_req: Request, res: Response) => {
+    res.json({ authRequired: !!VOICE_AUTH_TOKEN });
+  });
 
   // Health check endpoint
   app.get('/api/health', (_req: Request, res: Response) => {
@@ -565,41 +598,17 @@ function createApp() {
   });
 
   // Reset the OpenClaw chat session (clear conversation history)
-  app.post('/api/session/reset', authMiddleware, async (_req: Request, res: Response) => {
-    if (!gatewayWs || gatewayWs.readyState !== WebSocket.OPEN) {
-      return res.status(503).json({ error: 'Gateway not connected' });
-    }
+  app.post('/api/session/reset', authMiddleware, (_req: Request, res: Response) => {
+    // Rotate the session key suffix — the gateway treats each key as a separate conversation
+    const oldKey = getSessionKey();
+    sessionKeySuffix++;
+    const newKey = getSessionKey();
+    console.log(`Session reset: rotated key from "${oldKey}" to "${newKey}"`);
 
-    const requestId = generateRequestId();
+    // Clear any active runs
+    activeRuns.clear();
 
-    const request = {
-      type: 'req',
-      id: requestId,
-      method: 'sessions.reset',
-      params: {
-        sessionKey: SESSION_KEY
-      }
-    };
-
-    // Wait for the response
-    const responsePromise = new Promise<any>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pendingRequests.delete(requestId);
-        reject(new Error('Session reset timeout'));
-      }, GATEWAY_TIMEOUT);
-      pendingRequests.set(requestId, { resolve, reject, timeout });
-    });
-
-    try {
-      gatewayWs.send(JSON.stringify(request));
-      console.log(`Sent session reset request ${requestId}`);
-      const result = await responsePromise;
-      console.log('Session reset result:', result);
-      res.json({ status: 'ok', message: 'Session reset successfully' });
-    } catch (error) {
-      console.error('Session reset error:', error);
-      res.status(500).json({ error: (error as Error).message });
-    }
+    res.json({ status: 'ok', message: 'Session reset successfully', sessionKey: newKey });
   });
 
   return app;
