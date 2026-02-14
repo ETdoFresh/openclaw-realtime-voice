@@ -14,7 +14,7 @@ const __dirname = dirname(__filename);
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'wss://openclaw.etdofresh.com';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 const SESSION_KEY = process.env.OPENCLAW_SESSION_KEY || 'realtime-voice:ET';
-const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-mini-realtime';
+const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-mini-realtime-preview';
 const GATEWAY_TIMEOUT = 30000; // 30 seconds timeout for responses
 const RECONNECT_DELAY = 5000; // 5 seconds between reconnection attempts
 

@@ -696,7 +696,7 @@ async function connect(): Promise<void> {
       configHeaders['Authorization'] = `Bearer ${authToken}`;
     }
     const configResponse = await fetch('/api/config', { headers: configHeaders });
-    const configData = configResponse.ok ? await configResponse.json() as { model: string } : { model: 'gpt-4o-mini-realtime' };
+    const configData = configResponse.ok ? await configResponse.json() as { model: string } : { model: 'gpt-4o-mini-realtime-preview' };
     const realtimeModel = configData.model;
     log(`Using model: ${realtimeModel}`, 'info');
 
