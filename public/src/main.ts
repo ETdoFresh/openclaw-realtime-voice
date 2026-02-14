@@ -23,13 +23,6 @@ interface ServerMessage {
   candidate?: RTCIceCandidateInit;
 }
 
-  { label: 'Very Slow' },
-  { label: 'Slow' },
-  { label: 'Normal' },
-  { label: 'Fast' },
-  { label: 'Very Fast' },
-];
-
 // ─── State ────────────────────────────────────────────────────────────
 
 let ws: WebSocket | null = null;
