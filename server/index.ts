@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server as HTTPServer } from 'http';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 
 dotenv.config();
 
@@ -729,7 +729,7 @@ export async function stop(): Promise<void> {
 }
 
 // If run directly (not as a module), start the server
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === `file://${resolve(process.argv[1])}`) {
   const PORT = parseInt(process.env.PORT || '3335', 10);
   start(PORT).catch((error) => {
     console.error('Failed to start server:', error);
