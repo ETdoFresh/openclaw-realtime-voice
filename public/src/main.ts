@@ -128,6 +128,18 @@ let animationFrameId: number | null = null;
 let isMuted = true;
 let currentResponseId: string | null = null;
 
+// Speech-aware result queue: buffer results while user is speaking
+let userSpeaking = false;
+let speechPauseTimer: ReturnType<typeof setTimeout> | null = null;
+const SPEECH_PAUSE_DELAY_MS = 1500; // Wait 1.5s after speech stops before delivering
+interface QueuedResult {
+  type: 'result' | 'notification';
+  text: string;
+  taskId?: string;
+  error?: boolean;
+}
+const pendingResultQueue: QueuedResult[] = [];
+
 // Auth token from sessionStorage
 let authToken = sessionStorage.getItem('voiceAuthToken') || '';
 
@@ -555,6 +567,71 @@ transcriptPttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); ptt
 transcriptPttBtn.addEventListener('touchend', (e) => { e.preventDefault(); pttEnd(); });
 transcriptPttBtn.addEventListener('touchcancel', pttEnd);
 
+// Deliver a queued result/notification to the voice agent via data channel
+function deliverToVoiceAgent(item: QueuedResult): void {
+  if (item.type === 'result') {
+    if (item.taskId) {
+      updateTaskStatus(item.taskId, item.error ? 'error' : 'completed');
+    }
+    addToTranscript('system', `Result: ${item.text}`);
+  } else {
+    addToTranscript('system', `Notification: ${item.text}`);
+  }
+
+  if (dc && dc.readyState === 'open') {
+    const prefix = item.type === 'result' ? '[OpenClaw result]' : '[OpenClaw notification]';
+    dc.send(JSON.stringify({
+      type: 'conversation.item.create',
+      item: {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: `${prefix} ${item.text}` }]
+      }
+    }));
+    dc.send(JSON.stringify({ type: 'response.create' }));
+  }
+}
+
+// Flush all queued results (called after user stops speaking + pause)
+function flushResultQueue(): void {
+  if (pendingResultQueue.length === 0) return;
+
+  log(`Delivering ${pendingResultQueue.length} queued result(s) after speech pause`, 'info');
+
+  // Batch multiple results into one message if >1
+  if (pendingResultQueue.length === 1) {
+    deliverToVoiceAgent(pendingResultQueue[0]);
+  } else {
+    const combined = pendingResultQueue.map(r => r.text).join('\n\n');
+    deliverToVoiceAgent({
+      type: 'result',
+      text: `[Multiple updates]\n${combined}`
+    });
+    // Update individual task statuses
+    for (const item of pendingResultQueue) {
+      if (item.taskId) {
+        updateTaskStatus(item.taskId, item.error ? 'error' : 'completed');
+      }
+    }
+  }
+
+  pendingResultQueue.length = 0;
+}
+
+// Enqueue or deliver a result depending on whether user is speaking
+function enqueueOrDeliver(item: QueuedResult): void {
+  const logType = item.error ? 'error' : 'task';
+  log(`${item.type === 'result' ? 'Task result' : 'Notification'}: ${item.text}`, logType);
+
+  if (userSpeaking) {
+    log('User is speaking — queuing result for delivery after pause', 'info');
+    pendingResultQueue.push(item);
+    return;
+  }
+
+  deliverToVoiceAgent(item);
+}
+
 // Barge-in handling: cancel current response when user starts speaking
 function handleBargeIn(): void {
   if (currentResponseId && dc && dc.readyState === 'open') {
@@ -636,55 +713,17 @@ async function connect(): Promise<void> {
       const data = JSON.parse(event.data) as WebSocketMessage;
 
       if (data.type === 'result') {
-        const logType = data.error ? 'error' : 'task';
-        log(`Task result: ${data.text}`, logType);
-
-        // Update task status
-        if (data.taskId) {
-          updateTaskStatus(data.taskId, data.error ? 'error' : 'completed');
-        }
-
-        // Add to transcript
-        addToTranscript('system', `Result: ${data.text}`);
-
-        // Inject result as conversation item
-        if (dc && dc.readyState === 'open') {
-          const responseEvent = {
-            type: 'conversation.item.create',
-            item: {
-              type: 'message',
-              role: 'user',
-              content: [{
-                type: 'input_text',
-                text: `[OpenClaw result] ${data.text}`
-              }]
-            }
-          };
-          dc.send(JSON.stringify(responseEvent));
-          dc.send(JSON.stringify({ type: 'response.create' }));
-        }
+        enqueueOrDeliver({
+          type: 'result',
+          text: data.text || '',
+          taskId: data.taskId,
+          error: data.error
+        });
       } else if (data.type === 'notification') {
-        log(`📢 Notification: ${data.text}`, 'task');
-
-        // Add to transcript
-        addToTranscript('system', `Notification: ${data.text}`);
-
-        // Inject notification as conversation item so the voice agent reads it aloud
-        if (dc && dc.readyState === 'open') {
-          const notificationEvent = {
-            type: 'conversation.item.create',
-            item: {
-              type: 'message',
-              role: 'user',
-              content: [{
-                type: 'input_text',
-                text: `[Notification] ${data.text}`
-              }]
-            }
-          };
-          dc.send(JSON.stringify(notificationEvent));
-          dc.send(JSON.stringify({ type: 'response.create' }));
-        }
+        enqueueOrDeliver({
+          type: 'notification',
+          text: data.text || ''
+        });
       }
     };
 
@@ -765,8 +804,24 @@ async function connect(): Promise<void> {
         currentResponseId = (msg as any).response?.id || Date.now().toString();
       } else if (msg.type === 'input_audio_buffer.speech_started') {
         log('User started speaking', 'info');
+        userSpeaking = true;
+        if (speechPauseTimer) {
+          clearTimeout(speechPauseTimer);
+          speechPauseTimer = null;
+        }
         handleBargeIn();
         addToTranscript('user', '[Speaking...]');
+      } else if (msg.type === 'input_audio_buffer.speech_stopped') {
+        log('User stopped speaking', 'info');
+        userSpeaking = false;
+        // Wait for a natural pause before delivering queued results
+        if (pendingResultQueue.length > 0) {
+          if (speechPauseTimer) clearTimeout(speechPauseTimer);
+          speechPauseTimer = setTimeout(() => {
+            speechPauseTimer = null;
+            flushResultQueue();
+          }, SPEECH_PAUSE_DELAY_MS);
+        }
       } else if (msg.type === 'conversation.item.created') {
         if (msg.item?.type === 'function_call') {
           log(`Tool called: ${msg.item.name}`, 'task');
