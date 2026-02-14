@@ -759,3 +759,10 @@ log('Ready to connect', 'info');
 renderTaskStatus();
 updateButtonStates();
 checkAuth();
+
+// Show build time
+fetch('/api/health').then(r => r.json()).then(d => {
+  const el = document.getElementById('buildTime');
+  if (el && d.buildTime && d.buildTime !== 'dev') el.textContent = `Built ${d.buildTime}`;
+  else if (el) el.textContent = 'dev build';
+}).catch(() => {});
