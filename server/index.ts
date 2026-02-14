@@ -422,7 +422,7 @@ function handleOpenAIMessage(msg: any): void {
               output: JSON.stringify({ status: 'queued', taskId, message: 'Task submitted to OpenClaw. Result will be delivered shortly.' })
             }
           }));
-          room.openaiWs.send(JSON.stringify({ type: 'response.create' }));
+          room.openaiWs.send(JSON.stringify({ type: 'response.create', response: { modalities: ['text'] } }));
         }
 
         // Send to gateway
