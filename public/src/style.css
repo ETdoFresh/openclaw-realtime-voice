@@ -575,7 +575,7 @@ button:disabled {
   margin-top: 12px;
 }
 
-/* Mobile Responsive */
+/* Tablet — transcript sidebar as overlay */
 @media (max-width: 1024px) {
   .transcript-sidebar {
     position: fixed;
@@ -590,58 +590,171 @@ button:disabled {
   }
 }
 
+/* Phone portrait */
 @media (max-width: 768px) {
+  body {
+    overflow: auto;
+  }
+
   .main-layout {
     flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
 
   .container {
-    padding: 15px;
+    padding: 12px;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
     max-width: 100%;
+    overflow: visible;
   }
 
+  /* Compact header */
   h1 {
-    font-size: 22px;
+    font-size: 20px;
+    margin-bottom: 4px;
   }
 
   .subtitle {
-    font-size: 12px;
+    font-size: 11px;
+    margin-bottom: 12px;
   }
 
-  .controls {
-    flex-direction: column;
-    gap: 10px;
+  /* Compact status */
+  .status {
+    padding: 10px;
+    margin-bottom: 12px;
   }
 
-  button {
-    width: 100%;
-  }
-
-  .transcript-sidebar {
-    width: 100%;
-    max-height: 50vh;
-    border-left: none;
-    border-top: 1px solid #333;
-  }
-
-  .transcript-sidebar.hidden {
-    transform: translateY(100%);
+  /* Compact visualizer */
+  .visualizer-container {
+    padding: 8px;
+    margin-bottom: 12px;
   }
 
   #visualizer {
     max-width: 100%;
+    height: 50px;
+  }
+
+  /* Settings: keep rows horizontal, tighter */
+  .settings {
+    padding: 10px;
+    gap: 8px;
+    margin-bottom: 12px;
   }
 
   .setting-row {
-    flex-direction: column;
-    align-items: stretch;
+    gap: 8px;
   }
 
   .setting-row label {
-    margin-bottom: 5px;
+    font-size: 13px;
+    min-width: 42px;
   }
 
+  .setting-row select {
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  #speedLabel {
+    min-width: 50px;
+    font-size: 12px;
+  }
+
+  /* Controls: 2-row grid layout */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .controls .btn-connect {
+    grid-column: 1 / -1;
+  }
+
+  .controls button {
+    padding: 12px 8px;
+    font-size: 14px;
+    width: 100%;
+  }
+
+  .controls .btn-mute {
+    flex: none;
+    padding: 12px;
+  }
+
+  /* Compact task status */
+  .task-status {
+    padding: 10px;
+    margin-bottom: 10px;
+    min-height: 50px;
+    max-height: 120px;
+  }
+
+  .task-item {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .task-text {
+    font-size: 12px;
+  }
+
+  /* Compact log */
   .log {
-    max-height: 200px;
+    padding: 10px;
+    max-height: 150px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .log-entry {
+    padding: 5px 6px;
+    margin-bottom: 4px;
+  }
+
+  /* Hide footer on mobile */
+  .footer {
+    display: none;
+  }
+
+  /* Transcript as full-screen overlay */
+  .transcript-sidebar {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-left: none;
+    z-index: 200;
+  }
+
+  .transcript-sidebar.hidden {
+    transform: translateX(100%);
+  }
+
+  .transcript-header {
+    padding: 16px;
+  }
+
+  .transcript-content {
+    padding: 12px;
+  }
+
+  .transcript-entry {
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+
+  /* Auth card on mobile */
+  .auth-card {
+    padding: 30px 20px;
+    margin: 0 16px;
   }
 }
