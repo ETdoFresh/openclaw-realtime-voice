@@ -430,6 +430,55 @@ button:disabled {
   color: #e0e0e0;
 }
 
+.transcript-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transcript-mute-btn,
+.transcript-ptt-btn {
+  background: #374151;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  transition: background 0.2s;
+  flex: none;
+}
+
+.transcript-mute-btn:hover,
+.transcript-ptt-btn:hover {
+  background: #4b5563;
+}
+
+.transcript-mute-btn.muted {
+  background: #dc2626;
+}
+
+.transcript-mute-btn.muted:hover {
+  background: #ef4444;
+}
+
+.transcript-ptt-btn {
+  background: #1e40af;
+}
+
+.transcript-ptt-btn:hover {
+  background: #2563eb;
+}
+
+.transcript-ptt-btn.active {
+  background: #16a34a;
+  box-shadow: 0 0 8px rgba(22, 163, 74, 0.5);
+}
+
 .transcript-toggle {
   background: transparent;
   border: none;
@@ -439,6 +488,7 @@ button:disabled {
   display: flex;
   align-items: center;
   transition: color 0.2s;
+  flex: none;
 }
 
 .transcript-toggle:hover {

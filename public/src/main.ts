@@ -239,6 +239,8 @@ const transcriptContent = document.getElementById('transcriptContent') as HTMLDi
 const transcriptToggle = document.getElementById('transcriptToggle') as HTMLButtonElement;
 const newSessionBtn = document.getElementById('newSessionBtn') as HTMLButtonElement;
 const showTranscriptBtn = document.getElementById('showTranscriptBtn') as HTMLButtonElement;
+const transcriptMuteBtn = document.getElementById('transcriptMuteBtn') as HTMLButtonElement;
+const transcriptPttBtn = document.getElementById('transcriptPttBtn') as HTMLButtonElement;
 
 // Speed slider label updates
 speedRange.addEventListener('input', () => {
@@ -455,9 +457,9 @@ function renderTaskStatus(): void {
   });
 }
 
-// Mute functionality
-function toggleMute(): void {
-  isMuted = !isMuted;
+// Mute functionality — shared logic that syncs both mute buttons
+function setMuted(muted: boolean): void {
+  isMuted = muted;
 
   if (pc) {
     const senders = pc.getSenders();
@@ -468,6 +470,7 @@ function toggleMute(): void {
     });
   }
 
+  // Sync main mute button
   muteBtn.classList.toggle('muted', isMuted);
   muteBtn.innerHTML = isMuted
     ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -480,10 +483,41 @@ function toggleMute(): void {
          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
        </svg>`;
 
+  // Sync transcript mute button
+  transcriptMuteBtn.classList.toggle('muted', isMuted);
+  const micOn = transcriptMuteBtn.querySelector('.mic-on') as SVGElement;
+  const micOff = transcriptMuteBtn.querySelector('.mic-off') as SVGElement;
+  if (micOn) micOn.style.display = isMuted ? 'none' : '';
+  if (micOff) micOff.style.display = isMuted ? '' : 'none';
+
   log(isMuted ? 'Microphone muted' : 'Microphone unmuted', 'info');
 }
 
+function toggleMute(): void {
+  setMuted(!isMuted);
+}
+
 muteBtn.addEventListener('click', toggleMute);
+transcriptMuteBtn.addEventListener('click', toggleMute);
+
+// Push-to-talk: hold to unmute, release to mute
+let pttWasMuted = false;
+function pttStart(): void {
+  pttWasMuted = isMuted;
+  if (isMuted) setMuted(false);
+  transcriptPttBtn.classList.add('active');
+}
+function pttEnd(): void {
+  if (pttWasMuted) setMuted(true);
+  transcriptPttBtn.classList.remove('active');
+}
+
+transcriptPttBtn.addEventListener('mousedown', pttStart);
+transcriptPttBtn.addEventListener('mouseup', pttEnd);
+transcriptPttBtn.addEventListener('mouseleave', pttEnd);
+transcriptPttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); pttStart(); });
+transcriptPttBtn.addEventListener('touchend', (e) => { e.preventDefault(); pttEnd(); });
+transcriptPttBtn.addEventListener('touchcancel', pttEnd);
 
 // Barge-in handling: cancel current response when user starts speaking
 function handleBargeIn(): void {
@@ -802,8 +836,7 @@ function disconnect(): void {
   disconnectBtn.disabled = true;
   muteBtn.disabled = true;
   newSessionBtn.disabled = true;
-  isMuted = false;
-  muteBtn.classList.remove('muted');
+  setMuted(false);
 }
 
 // New session: reset OpenClaw history + reconnect OpenAI voice
