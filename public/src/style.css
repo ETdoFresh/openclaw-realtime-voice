@@ -436,6 +436,7 @@ button:disabled {
   gap: 8px;
 }
 
+.transcript-connect-btn,
 .transcript-mute-btn,
 .transcript-ptt-btn {
   background: #374151;
@@ -453,6 +454,7 @@ button:disabled {
   flex: none;
 }
 
+.transcript-connect-btn:hover,
 .transcript-mute-btn:hover,
 .transcript-ptt-btn:hover {
   background: #4b5563;
@@ -463,6 +465,18 @@ button:disabled {
 }
 
 .transcript-mute-btn.muted:hover {
+  background: #ef4444;
+}
+
+.transcript-connect-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.transcript-connect-btn.connected {
+  background: #dc2626;
+}
+
+.transcript-connect-btn.connected:hover {
   background: #ef4444;
 }
 

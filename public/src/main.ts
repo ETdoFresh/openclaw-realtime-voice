@@ -241,6 +241,7 @@ const newSessionBtn = document.getElementById('newSessionBtn') as HTMLButtonElem
 const showTranscriptBtn = document.getElementById('showTranscriptBtn') as HTMLButtonElement;
 const transcriptMuteBtn = document.getElementById('transcriptMuteBtn') as HTMLButtonElement;
 const transcriptPttBtn = document.getElementById('transcriptPttBtn') as HTMLButtonElement;
+const transcriptConnectBtn = document.getElementById('transcriptConnectBtn') as HTMLButtonElement;
 
 // Speed slider label updates
 speedRange.addEventListener('input', () => {
@@ -265,8 +266,27 @@ showTranscriptBtn.addEventListener('click', () => {
   updateShowTranscriptBtn();
 });
 
+// Sync the transcript connect button icon and style with connection state
+function updateTranscriptConnectBtn(connected: boolean): void {
+  transcriptConnectBtn.classList.toggle('connected', connected);
+  const iconConnect = transcriptConnectBtn.querySelector('.icon-connect') as SVGElement;
+  const iconDisconnect = transcriptConnectBtn.querySelector('.icon-disconnect') as SVGElement;
+  if (iconConnect) iconConnect.style.display = connected ? 'none' : '';
+  if (iconDisconnect) iconDisconnect.style.display = connected ? '' : 'none';
+}
+
+// Transcript connect/disconnect button
+transcriptConnectBtn.addEventListener('click', () => {
+  if (pc) {
+    disconnect();
+  } else {
+    connect();
+  }
+});
+
 // Initialize button state
 updateShowTranscriptBtn();
+updateTranscriptConnectBtn(false);
 
 // Audio Visualizer
 function setupVisualizer(stream: MediaStream): void {
@@ -700,6 +720,7 @@ async function connect(): Promise<void> {
       disconnectBtn.disabled = false;
       muteBtn.disabled = false;
       newSessionBtn.disabled = false;
+      updateTranscriptConnectBtn(true);
     };
 
     dc.onmessage = async (event: MessageEvent) => {
@@ -824,6 +845,7 @@ async function connect(): Promise<void> {
     setStatus('', 'Disconnected');
     connectBtn.disabled = false;
     cleanup();
+    updateTranscriptConnectBtn(false);
   }
 }
 
@@ -837,6 +859,7 @@ function disconnect(): void {
   muteBtn.disabled = true;
   newSessionBtn.disabled = true;
   setMuted(false);
+  updateTranscriptConnectBtn(false);
 }
 
 // New session: reset OpenClaw history + reconnect OpenAI voice
