@@ -40,6 +40,14 @@ interface PendingRequest {
 }
 const pendingRequests = new Map<string, PendingRequest>();
 
+// Track active agent runs: runId -> { taskId, sessionId, text }
+interface ActiveRun {
+  taskId: string;
+  sessionId: string;
+  text: string;
+}
+const activeRuns = new Map<string, ActiveRun>();
+
 // Rate limiting: Track requests per IP
 interface RateLimitEntry {
   count: number;
@@ -127,7 +135,45 @@ function scheduleReconnect(): void {
 }
 
 function handleGatewayMessage(message: any): void {
-  console.log('Gateway message received:', message);
+  // Suppress noisy tick/health events
+  if (message.type === 'event' && (message.event === 'tick' || message.event === 'health')) {
+    return;
+  }
+  console.log('Gateway message received:', JSON.stringify(message, null, 2));
+
+  // Handle connect.challenge — respond with a full connect request per gateway protocol
+  if (message.type === 'event' && message.event === 'connect.challenge') {
+    const nonce = message.payload?.nonce;
+    if (nonce && gatewayWs && gatewayWs.readyState === WebSocket.OPEN) {
+      const connectRequest = {
+        type: 'req',
+        id: `connect_${Date.now()}`,
+        method: 'connect',
+        params: {
+          minProtocol: 3,
+          maxProtocol: 3,
+          client: {
+            id: 'gateway-client',
+            version: '1.0.0',
+            platform: 'linux',
+            mode: 'backend'
+          },
+          role: 'operator',
+          scopes: ['operator.read', 'operator.write', 'operator.admin'],
+          auth: { token: GATEWAY_TOKEN }
+        }
+      };
+      gatewayWs.send(JSON.stringify(connectRequest));
+      console.log('Sent connect request in response to challenge');
+    }
+    return;
+  }
+
+  // Log hello-ok features for debugging available methods
+  if (message.type === 'res' && message.ok && message.payload?.type === 'hello-ok') {
+    console.log('Available methods:', JSON.stringify(message.payload.features?.methods));
+    console.log('Available events:', JSON.stringify(message.payload.features?.events));
+  }
 
   // Handle response to a specific request
   if (message.id && pendingRequests.has(message.id)) {
@@ -136,9 +182,44 @@ function handleGatewayMessage(message: any): void {
     pendingRequests.delete(message.id);
 
     if (message.error) {
-      pending.reject(new Error(message.error));
+      const errMsg = typeof message.error === 'string' ? message.error : message.error.message || JSON.stringify(message.error);
+      pending.reject(new Error(errMsg));
     } else {
-      pending.resolve(message.result || message.response || 'Request processed');
+      // chat.send returns { status: 'started', runId: '...' }
+      // Re-key activeRuns from requestId to the gateway-assigned runId
+      const result = message.result || message.payload;
+      if (result?.runId && activeRuns.has(message.id)) {
+        const run = activeRuns.get(message.id)!;
+        activeRuns.delete(message.id);
+        activeRuns.set(result.runId, run);
+        console.log(`Mapped request ${message.id} -> runId ${result.runId} for task ${run.taskId}`);
+      }
+      pending.resolve(result || message.response || 'Request processed');
+    }
+    return;
+  }
+
+  // Handle streaming agent events — collect text and forward final result to client
+  if (message.type === 'event' && message.event === 'agent') {
+    const { runId, stream, data } = message.payload || {};
+    const run = activeRuns.get(runId);
+    if (!run) return;
+
+    if (stream === 'assistant' && data?.text) {
+      // Update accumulated text (data.text is the full text so far)
+      run.text = data.text;
+    } else if (stream === 'lifecycle' && data?.phase === 'end') {
+      // Agent run finished — send final result to client
+      const ws = sessions.get(run.sessionId);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'result',
+          taskId: run.taskId,
+          text: run.text || 'Task completed (no text response)'
+        }));
+        console.log(`Sent agent result for task ${run.taskId} to session ${run.sessionId}`);
+      }
+      activeRuns.delete(runId);
     }
     return;
   }
@@ -162,14 +243,18 @@ function handleGatewayMessage(message: any): void {
   }
 }
 
-async function sendToGateway(message: string): Promise<string> {
+function generateRequestId(): string {
+  return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+async function sendToGateway(message: string, requestId?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     if (!gatewayWs || gatewayWs.readyState !== WebSocket.OPEN) {
       reject(new Error('Gateway not connected'));
       return;
     }
 
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    if (!requestId) requestId = generateRequestId();
 
     // Set timeout for request
     const timeout = setTimeout(() => {
@@ -194,13 +279,15 @@ async function sendToGateway(message: string): Promise<string> {
     //   }
     // }
 
-    // Send to gateway with JSON-RPC style format
+    // Send to gateway with protocol v3 request frame format
     const request = {
+      type: 'req',
       id: requestId,
-      method: 'process',
+      method: 'chat.send',
       params: {
-        session: SESSION_KEY,
-        message: message
+        sessionKey: SESSION_KEY,
+        message: message,
+        idempotencyKey: requestId
       }
     };
 
@@ -421,39 +508,30 @@ function createApp() {
     // Immediately return the task ID
     res.json({ taskId });
 
-    // Process asynchronously
+    // Generate requestId upfront — it becomes the runId in gateway agent events
+    const requestId = generateRequestId();
+
+    // Register the run so streaming agent events get forwarded to this client
+    activeRuns.set(requestId, { taskId, sessionId, text: '' });
+
+    // Process asynchronously — chat.send returns { status: 'started' }
+    // The actual response streams via 'agent' events, handled in handleGatewayMessage
     (async () => {
       try {
-        // Send to OpenClaw gateway
-        const response = await sendToGateway(message);
-        console.log(`Gateway response for task ${taskId}:`, response);
-
-        // Send result back to client via WebSocket
-        const ws = sessions.get(sessionId);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          const result = {
-            type: 'result',
-            taskId,
-            text: response
-          };
-          ws.send(JSON.stringify(result));
-          console.log(`Sent result for task ${taskId} to session ${sessionId}`);
-        } else {
-          console.log(`No active WebSocket for session ${sessionId}`);
-        }
+        await sendToGateway(message, requestId);
+        console.log(`Gateway accepted task ${taskId} (run ${requestId})`);
       } catch (error) {
         console.error(`Error processing task ${taskId}:`, error);
+        activeRuns.delete(requestId);
 
-        // Send error back to client
         const ws = sessions.get(sessionId);
         if (ws && ws.readyState === WebSocket.OPEN) {
-          const errorResult = {
+          ws.send(JSON.stringify({
             type: 'result',
             taskId,
             text: `Error: ${(error as Error).message}. Please try again.`,
             error: true
-          };
-          ws.send(JSON.stringify(errorResult));
+          }));
         }
       }
     })();
