@@ -41,7 +41,6 @@ let isConnecting = false;
 interface RoomUser {
   id: string;
   ws: WebSocket;
-  aiActive: boolean;   // this user has toggled AI active
   pttActive: boolean;   // this user is holding push-to-talk
   muted: boolean;
 }
@@ -53,7 +52,7 @@ interface Room {
   openaiSessionConfigured: boolean;
   voice: string;
   systemPrompt: string;
-  globalAiActive: boolean; // at least one user has AI active
+  // AI auto-connects when users are present
 }
 
 // Single room for now
@@ -64,7 +63,7 @@ const room: Room = {
   openaiSessionConfigured: false,
   voice: 'coral',
   systemPrompt: '',
-  globalAiActive: false,
+  // AI auto-managed
 };
 
 // Speed removed
@@ -477,15 +476,13 @@ function sendAudioToOpenAI(audioBase64: string): void {
   }));
 }
 
-// Update global AI active state
-function updateGlobalAiActive(): void {
-  const wasActive = room.globalAiActive;
-  room.globalAiActive = Array.from(room.users.values()).some(u => u.aiActive);
-
-  if (room.globalAiActive && !room.openaiWs && !room.openaiConnecting) {
+// AI auto-connects when anyone is in the room
+function updateAiConnection(): void {
+  if (room.users.size > 0 && !room.openaiWs && !room.openaiConnecting) {
     connectOpenAI();
+  } else if (room.users.size === 0) {
+    disconnectOpenAI();
   }
-  // Don't disconnect OpenAI when AI goes inactive - keep it connected for PTT
 }
 
 // ─── Auth middleware ──────────────────────────────────────────────────
@@ -558,7 +555,7 @@ function createApp() {
   app.get('/api/stats', authMiddleware, (_req: Request, res: Response) => {
     res.json({
       activeUsers: room.users.size,
-      aiActive: room.globalAiActive,
+      aiAutoConnected: room.users.size > 0,
       openaiConnected: room.openaiWs !== null,
       totalSessionDurationMs,
     });
@@ -572,7 +569,7 @@ function createApp() {
     activeRuns.clear();
     // Reconnect OpenAI to clear conversation
     disconnectOpenAI();
-    if (room.globalAiActive || room.users.size > 0) {
+    if (room.users.size > 0 || room.users.size > 0) {
       connectOpenAI();
     }
     res.json({ status: 'ok', sessionKey: newKey });
@@ -604,7 +601,8 @@ function handleClientMessage(userId: string, user: RoomUser, data: any): void {
       // Notify others
       broadcastToRoom({ type: 'user-joined', userId }, userId);
 
-      // Send AI status
+      // Auto-connect AI when users join
+      updateAiConnection();
       user.ws.send(JSON.stringify({ type: 'ai-status', connected: room.openaiWs !== null && room.openaiWs.readyState === WebSocket.OPEN }));
       console.log(`User ${userId} joined room (${room.users.size} users)`);
       break;
@@ -630,19 +628,6 @@ function handleClientMessage(userId: string, user: RoomUser, data: any): void {
         break;
       }
       sendAudioToOpenAI(data.audio);
-      break;
-    }
-
-    case 'ai-active': {
-      user.aiActive = !!data.active;
-      updateGlobalAiActive();
-      broadcastToRoom({ type: 'ai-active-changed', userId, active: user.aiActive, globalActive: room.globalAiActive });
-      console.log(`User ${userId} AI active: ${user.aiActive} (global: ${room.globalAiActive})`);
-
-      // Connect to OpenAI if needed
-      if (user.aiActive && !room.openaiWs && !room.openaiConnecting) {
-        connectOpenAI();
-      }
       break;
     }
 
@@ -707,7 +692,7 @@ export async function start(port?: number): Promise<void> {
     }
 
     const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-    const user: RoomUser = { id: userId, ws, aiActive: false, pttActive: false, muted: false };
+    const user: RoomUser = { id: userId, ws, pttActive: false, muted: false };
     room.users.set(userId, user);
 
     // Send userId to client
@@ -725,7 +710,7 @@ export async function start(port?: number): Promise<void> {
     ws.on('close', () => {
       room.users.delete(userId);
       broadcastToRoom({ type: 'user-left', userId });
-      updateGlobalAiActive();
+      updateAiConnection();
       console.log(`User ${userId} left (${room.users.size} users)`);
 
       // Disconnect OpenAI if no users left

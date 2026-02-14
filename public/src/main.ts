@@ -44,7 +44,6 @@ let audioSourceNode: MediaStreamAudioSourceNode | null = null;
 let isConnected = false;
 let isMuted = true;
 let isAiMuted = true;
-let isAiActive = false;
 let isPttActive = false;
 let aiConnected = false;
 let audioSendStarted = false;
@@ -80,7 +79,6 @@ const statusText = document.getElementById('statusText') as HTMLDivElement;
 const logDiv = document.getElementById('log') as HTMLDivElement;
 const connectBtn = document.getElementById('connectBtn') as HTMLButtonElement;
 const muteBtn = document.getElementById('muteBtn') as HTMLButtonElement;
-const aiActiveBtn = document.getElementById('aiActiveBtn') as HTMLButtonElement;
 const pttBtn = document.getElementById('pttBtn') as HTMLButtonElement;
 const voiceSelect = document.getElementById('voiceSelect') as HTMLSelectElement;
 // Speed elements removed
@@ -99,7 +97,6 @@ const aiMuteBtn = document.getElementById('aiMuteBtn') as HTMLButtonElement;
 const transcriptConnectBtn = document.getElementById('transcriptConnectBtn') as HTMLButtonElement;
 const transcriptMuteBtn = document.getElementById('transcriptMuteBtn') as HTMLButtonElement;
 const transcriptAiMuteBtn = document.getElementById('transcriptAiMuteBtn') as HTMLButtonElement;
-const transcriptAiActiveBtn = document.getElementById('transcriptAiActiveBtn') as HTMLButtonElement;
 const transcriptPttBtn = document.getElementById('transcriptPttBtn') as HTMLButtonElement;
 
 // ─── Auth ─────────────────────────────────────────────────────────────
@@ -299,8 +296,6 @@ function setupAudioCapture(stream: MediaStream): void {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (isMuted) return; // overall mute blocks everything
     if (isAiMuted && !isPttActive) return; // AI mute blocks AI unless PTT
-    // Only send if AI active or PTT active
-    if (!isAiActive && !isPttActive) return;
 
     const inputData = e.inputBuffer.getChannelData(0);
     // Convert float32 to PCM16
@@ -449,7 +444,6 @@ function handleServerMessage(msg: ServerMessage): void {
       log(`AI ${aiConnected ? 'connected' : 'disconnected'}`, aiConnected ? 'success' : 'info');
       break;
 
-    case 'ai-active-changed':
       log(`AI ${msg.globalActive ? 'active' : 'inactive'} (${msg.userId?.slice(-6)} ${msg.active ? 'on' : 'off'})`, 'info');
       break;
 
@@ -562,7 +556,6 @@ async function connect(): Promise<void> {
 
 function disconnect(): void {
   log('Disconnecting...', 'info');
-  isAiActive = false;
   isPttActive = false;
   audioSendStarted = false;
   cleanup();
@@ -596,7 +589,6 @@ function updateButtonStates(): void {
 
   muteBtn.disabled = !isConnected;
   aiMuteBtn.disabled = !isConnected;
-  aiActiveBtn.disabled = !isConnected;
   pttBtn.disabled = !isConnected;
   newSessionBtn.disabled = !isConnected;
 
@@ -607,12 +599,10 @@ function updateButtonStates(): void {
     : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.69 2.36a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.76.33 1.55.56 2.36.69A2 2 0 0 1 22 16.92z"/></svg><span>Connect</span>`;
   transcriptMuteBtn.disabled = !isConnected;
   transcriptAiMuteBtn.disabled = !isConnected;
-  transcriptAiActiveBtn.disabled = !isConnected;
   transcriptPttBtn.disabled = !isConnected;
 
   updateMuteButton();
   updateAiMuteButton();
-  updateAiActiveButton();
 }
 
 function updateMuteButton(): void {
@@ -637,18 +627,6 @@ function updateAiMuteButton(): void {
   transcriptAiMuteBtn.innerHTML = isAiMuted
     ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28z"/><path d="M14.98 11.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99z"/><path d="M4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg><span>AI Unmute</span>`
     : `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg><span>AI Mute</span>`;
-}
-
-function updateAiActiveButton(): void {
-  aiActiveBtn.classList.toggle('active', isAiActive);
-  aiActiveBtn.innerHTML = isAiActive
-    ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><span>AI On</span>`
-    : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg><span>AI Off</span>`;
-  // Mirror
-  transcriptAiActiveBtn.classList.toggle('active', isAiActive);
-  transcriptAiActiveBtn.innerHTML = isAiActive
-    ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><span>AI On</span>`
-    : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg><span>AI Off</span>`;
 }
 
 function toggleConnect(): void {
@@ -677,19 +655,11 @@ function toggleAiMute(): void {
   log(isAiMuted ? 'AI muted' : 'AI unmuted', 'info');
 }
 
-function toggleAiActive(): void {
-  isAiActive = !isAiActive;
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'ai-active', active: isAiActive }));
-  }
-  updateAiActiveButton();
-  log(isAiActive ? 'AI activated — all audio streams to AI' : 'AI deactivated', isAiActive ? 'success' : 'info');
-}
-
 function pttStart(): void {
   if (!isConnected) return;
   isPttActive = true;
   pttBtn.classList.add('active');
+  transcriptPttBtn.classList.add('active');
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'ptt-start' }));
   }
@@ -700,6 +670,7 @@ function pttEnd(): void {
   if (!isPttActive) return;
   isPttActive = false;
   pttBtn.classList.remove('active');
+  transcriptPttBtn.classList.remove('active');
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'ptt-stop' }));
   }
@@ -752,7 +723,6 @@ async function newSession(): Promise<void> {
 connectBtn.addEventListener('click', toggleConnect);
 muteBtn.addEventListener('click', toggleMute);
 aiMuteBtn.addEventListener('click', toggleAiMute);
-aiActiveBtn.addEventListener('click', toggleAiActive);
 newSessionBtn.addEventListener('click', newSession);
 
 // PTT: hold to talk
@@ -767,7 +737,6 @@ pttBtn.addEventListener('touchcancel', pttEnd);
 transcriptConnectBtn.addEventListener('click', toggleConnect);
 transcriptMuteBtn.addEventListener('click', toggleMute);
 transcriptAiMuteBtn.addEventListener('click', toggleAiMute);
-transcriptAiActiveBtn.addEventListener('click', toggleAiActive);
 transcriptPttBtn.addEventListener('mousedown', pttStart);
 transcriptPttBtn.addEventListener('mouseup', pttEnd);
 transcriptPttBtn.addEventListener('mouseleave', pttEnd);

@@ -624,6 +624,11 @@ button:disabled {
   color: #ccc;
 }
 
+.transcript-actions .btn-ptt.active {
+  background: #16a34a;
+  color: #fff;
+}
+
 .transcript-actions .btn-sm:disabled {
   opacity: 0.4;
   cursor: not-allowed;
