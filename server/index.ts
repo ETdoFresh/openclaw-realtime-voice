@@ -577,7 +577,7 @@ function createApp() {
       id: requestId,
       method: 'sessions.reset',
       params: {
-        sessionKey: `agent:main:${SESSION_KEY.toLowerCase()}`
+        sessionKey: SESSION_KEY
       }
     };
 
