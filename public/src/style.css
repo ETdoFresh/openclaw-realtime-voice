@@ -920,9 +920,9 @@ button:disabled {
     margin-bottom: 4px;
   }
 
-  /* Hide footer on mobile */
   .footer {
-    display: none;
+    font-size: 0.7em;
+    padding: 4px;
   }
 
   /* Transcript as full-screen overlay */
