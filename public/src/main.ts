@@ -552,6 +552,7 @@ function disconnect(): void {
   cleanup();
   setStatus('', 'Disconnected');
   isConnected = false;
+  updateUserCount(0);
   updateButtonStates();
 }
 
