@@ -42,7 +42,7 @@ let audioSourceNode: MediaStreamAudioSourceNode | null = null;
 
 // UI state
 let isConnected = false;
-let isMuted = false;
+let isMuted = true;
 let isAiActive = false;
 let isPttActive = false;
 let aiConnected = false;
@@ -378,6 +378,8 @@ function handleServerMessage(msg: ServerMessage): void {
         type: 'join',
         voice: voiceSelect.value,
       }));
+      // Notify server of initial mute state
+      ws!.send(JSON.stringify({ type: 'mute', muted: isMuted }));
       break;
 
     case 'room-users':
