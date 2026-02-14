@@ -296,7 +296,7 @@ function setupAudioCapture(stream: MediaStream): void {
 
   audioWorkletNode.onaudioprocess = (e) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (isMuted || isAiMuted) return;
+    if (isAiMuted && !isPttActive) return;
     // Only send if AI active or PTT active
     if (!isAiActive && !isPttActive) return;
 
@@ -514,8 +514,8 @@ async function connect(): Promise<void> {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     log('Microphone access granted', 'success');
 
-    // Start muted
-    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+    // Keep audio track always enabled (ScriptProcessor needs real audio for AI)
+    // Peer muting is handled by replacing sender tracks
 
     setupVisualizer(localStream);
     setupAudioCapture(localStream);
@@ -654,8 +654,13 @@ function toggleConnect(): void {
 
 function toggleMute(): void {
   isMuted = !isMuted;
-  if (localStream) {
-    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
+  // Mute/unmute audio going to peers by disabling senders
+  for (const [, pc] of peerConnections) {
+    pc.getSenders().forEach(sender => {
+      if (sender.track && sender.track.kind === 'audio') {
+        sender.track.enabled = !isMuted;
+      }
+    });
   }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'mute', muted: isMuted }));
