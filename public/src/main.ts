@@ -91,6 +91,12 @@ const newSessionBtn = document.getElementById('newSessionBtn') as HTMLButtonElem
 const showTranscriptBtn = document.getElementById('showTranscriptBtn') as HTMLButtonElement;
 const userCountSpan = document.getElementById('userCount') as HTMLSpanElement;
 
+// Transcript action bar buttons (mirrors)
+const transcriptConnectBtn = document.getElementById('transcriptConnectBtn') as HTMLButtonElement;
+const transcriptMuteBtn = document.getElementById('transcriptMuteBtn') as HTMLButtonElement;
+const transcriptAiActiveBtn = document.getElementById('transcriptAiActiveBtn') as HTMLButtonElement;
+const transcriptPttBtn = document.getElementById('transcriptPttBtn') as HTMLButtonElement;
+
 // ─── Auth ─────────────────────────────────────────────────────────────
 
 async function checkAuth(): Promise<void> {
@@ -583,6 +589,13 @@ function updateButtonStates(): void {
   pttBtn.disabled = !isConnected;
   newSessionBtn.disabled = !isConnected;
 
+  // Mirror to transcript bar
+  transcriptConnectBtn.textContent = isConnected ? 'Disconnect' : 'Connect';
+  transcriptConnectBtn.className = isConnected ? 'btn-disconnect btn-sm' : 'btn-connect btn-sm';
+  transcriptMuteBtn.disabled = !isConnected;
+  transcriptAiActiveBtn.disabled = !isConnected;
+  transcriptPttBtn.disabled = !isConnected;
+
   updateMuteButton();
   updateAiActiveButton();
 }
@@ -592,6 +605,9 @@ function updateMuteButton(): void {
   muteBtn.innerHTML = isMuted
     ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28z"/><path d="M14.98 11.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99z"/><path d="M4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"/></svg><span>Unmute</span>`
     : `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg><span>Mute</span>`;
+  // Mirror
+  transcriptMuteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+  transcriptMuteBtn.classList.toggle('muted', isMuted);
 }
 
 function updateAiActiveButton(): void {
@@ -599,6 +615,9 @@ function updateAiActiveButton(): void {
   aiActiveBtn.innerHTML = isAiActive
     ? `<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><span>AI Active</span>`
     : `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg><span>AI Off</span>`;
+  // Mirror
+  transcriptAiActiveBtn.textContent = isAiActive ? 'AI Active' : 'AI Off';
+  transcriptAiActiveBtn.classList.toggle('active', isAiActive);
 }
 
 function toggleConnect(): void {
@@ -705,6 +724,17 @@ pttBtn.addEventListener('mouseleave', pttEnd);
 pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); pttStart(); });
 pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); pttEnd(); });
 pttBtn.addEventListener('touchcancel', pttEnd);
+
+// Transcript action bar mirrors
+transcriptConnectBtn.addEventListener('click', toggleConnect);
+transcriptMuteBtn.addEventListener('click', toggleMute);
+transcriptAiActiveBtn.addEventListener('click', toggleAiActive);
+transcriptPttBtn.addEventListener('mousedown', pttStart);
+transcriptPttBtn.addEventListener('mouseup', pttEnd);
+transcriptPttBtn.addEventListener('mouseleave', pttEnd);
+transcriptPttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); pttStart(); });
+transcriptPttBtn.addEventListener('touchend', (e) => { e.preventDefault(); pttEnd(); });
+transcriptPttBtn.addEventListener('touchcancel', pttEnd);
 
 // ─── Init ─────────────────────────────────────────────────────────────
 

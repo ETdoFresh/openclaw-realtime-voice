@@ -520,6 +520,66 @@ button:disabled {
   padding: 20px;
 }
 
+.transcript-actions {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #111;
+  border-top: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.transcript-actions .btn-sm {
+  flex: 1;
+  padding: 8px 4px;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.transcript-actions .btn-connect {
+  background: #22c55e;
+  color: #000;
+}
+
+.transcript-actions .btn-disconnect {
+  background: #ef4444;
+  color: #fff;
+}
+
+.transcript-actions .btn-mute {
+  background: #333;
+  color: #ccc;
+}
+
+.transcript-actions .btn-mute.muted {
+  background: #ef4444;
+  color: #fff;
+}
+
+.transcript-actions .btn-ai-active {
+  background: #333;
+  color: #ccc;
+}
+
+.transcript-actions .btn-ai-active.active {
+  background: #667eea;
+  color: #fff;
+}
+
+.transcript-actions .btn-ptt {
+  background: #333;
+  color: #ccc;
+}
+
+.transcript-actions .btn-sm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .transcript-entry {
   margin-bottom: 16px;
   padding: 12px;
