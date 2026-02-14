@@ -18,4 +18,6 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server/dist ./server/dist
 
+ENV NODE_ENV=production
+
 CMD ["node", "server/dist/index.js"]
