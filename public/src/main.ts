@@ -238,16 +238,33 @@ const transcriptSidebar = document.getElementById('transcriptSidebar') as HTMLDi
 const transcriptContent = document.getElementById('transcriptContent') as HTMLDivElement;
 const transcriptToggle = document.getElementById('transcriptToggle') as HTMLButtonElement;
 const newSessionBtn = document.getElementById('newSessionBtn') as HTMLButtonElement;
+const showTranscriptBtn = document.getElementById('showTranscriptBtn') as HTMLButtonElement;
 
 // Speed slider label updates
 speedRange.addEventListener('input', () => {
   speedLabel.textContent = SPEED_OPTIONS[Number(speedRange.value)].label;
 });
 
-// Transcript sidebar toggle
+// Sync the floating "show transcript" button visibility with sidebar state
+function updateShowTranscriptBtn(): void {
+  const isHidden = transcriptSidebar.classList.contains('hidden');
+  showTranscriptBtn.classList.toggle('visible', isHidden);
+}
+
+// Transcript sidebar toggle (hide)
 transcriptToggle.addEventListener('click', () => {
-  transcriptSidebar.classList.toggle('hidden');
+  transcriptSidebar.classList.add('hidden');
+  updateShowTranscriptBtn();
 });
+
+// Floating button (show)
+showTranscriptBtn.addEventListener('click', () => {
+  transcriptSidebar.classList.remove('hidden');
+  updateShowTranscriptBtn();
+});
+
+// Initialize button state
+updateShowTranscriptBtn();
 
 // Audio Visualizer
 function setupVisualizer(stream: MediaStream): void {
