@@ -652,14 +652,9 @@ function updateUserCount(count: number): void {
 
 // ─── Settings ─────────────────────────────────────────────────────────
 
-});
-
 voiceSelect.addEventListener('change', () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
-  }
-});
-
-  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'update-settings', voice: voiceSelect.value }));
   }
 });
 
