@@ -915,7 +915,12 @@ async function connect(): Promise<void> {
     });
 
     if (!sdpResponse.ok) {
-      throw new Error('Failed to connect to OpenAI Realtime API');
+      let detail = `HTTP ${sdpResponse.status} ${sdpResponse.statusText}`;
+      try {
+        const body = await sdpResponse.text();
+        if (body) detail += ` — ${body.slice(0, 500)}`;
+      } catch { /* ignore */ }
+      throw new Error(`Failed to connect to OpenAI Realtime API: ${detail}`);
     }
 
     const answer = await sdpResponse.text();
