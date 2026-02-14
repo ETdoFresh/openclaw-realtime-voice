@@ -274,10 +274,11 @@ async function sendToGateway(message: string, requestId?: string): Promise<strin
     }
 
     if (!requestId) requestId = generateRequestId();
+    const id = requestId;
 
     // Set timeout for request
     const timeout = setTimeout(() => {
-      pendingRequests.delete(requestId);
+      pendingRequests.delete(id);
       reject(new Error('Gateway request timeout'));
     }, GATEWAY_TIMEOUT);
 
