@@ -671,11 +671,26 @@ function pttStart(): void {
   log('Push-to-talk: ON', 'info');
 }
 
+function sendSilenceFrames(count: number): void {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  // 2048 samples of silence at 24kHz (~85ms per frame)
+  const silence = new Int16Array(2048);
+  const bytes = new Uint8Array(silence.buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const base64 = btoa(binary);
+  for (let i = 0; i < count; i++) {
+    ws.send(JSON.stringify({ type: 'audio-data', audio: base64 }));
+  }
+}
+
 function pttEnd(): void {
   if (!isPttActive) return;
   isPttActive = false;
   pttBtn.classList.remove('active');
   transcriptPttBtn.classList.remove('active');
+  // Send silence to trigger VAD end-of-speech detection (~500ms)
+  sendSilenceFrames(6);
   // Restore mute state after PTT
   if (isMuted && localStream) {
     localStream.getAudioTracks().forEach(t => t.enabled = false);
