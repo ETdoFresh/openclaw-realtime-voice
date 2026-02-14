@@ -392,7 +392,7 @@ function createApp() {
 
   // Serve static files in production
   if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(join(__dirname, '../dist/public')));
+    app.use(express.static(join(__dirname, '../../dist/public')));
   }
 
   // Health check endpoint
@@ -448,7 +448,7 @@ function createApp() {
   // Serve the main page in production
   app.get('/', (_req: Request, res: Response) => {
     if (process.env.NODE_ENV === 'production') {
-      res.sendFile(join(__dirname, '../dist/public', 'index.html'));
+      res.sendFile(join(__dirname, '../../dist/public', 'index.html'));
     } else {
       res.json({ message: 'Server running. Use Vite dev server for development.' });
     }
