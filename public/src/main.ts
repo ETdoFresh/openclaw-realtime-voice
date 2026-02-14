@@ -23,6 +23,8 @@ interface ServerMessage {
   candidate?: RTCIceCandidateInit;
 }
 
+// Speed removed
+
 // ─── State ────────────────────────────────────────────────────────────
 
 let ws: WebSocket | null = null;
@@ -79,6 +81,7 @@ const muteBtn = document.getElementById('muteBtn') as HTMLButtonElement;
 const aiActiveBtn = document.getElementById('aiActiveBtn') as HTMLButtonElement;
 const pttBtn = document.getElementById('pttBtn') as HTMLButtonElement;
 const voiceSelect = document.getElementById('voiceSelect') as HTMLSelectElement;
+// Speed elements removed
 const visualizerCanvas = document.getElementById('visualizer') as HTMLCanvasElement;
 const taskStatusDiv = document.getElementById('taskStatus') as HTMLDivElement;
 const transcriptSidebar = document.getElementById('transcriptSidebar') as HTMLDivElement;
