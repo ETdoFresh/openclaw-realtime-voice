@@ -11,7 +11,7 @@
     },
     "model": {
       "type": "string",
-      "default": "gpt-4o-realtime-preview",
+      "default": "gpt-4o-mini-realtime",
       "description": "OpenAI realtime model"
     },
     "voice": {

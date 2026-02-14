@@ -14,6 +14,7 @@ const __dirname = dirname(__filename);
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL || 'wss://openclaw.etdofresh.com';
 const GATEWAY_TOKEN = process.env.OPENCLAW_GATEWAY_TOKEN || '';
 const SESSION_KEY = process.env.OPENCLAW_SESSION_KEY || 'realtime-voice:ET';
+const REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-4o-mini-realtime';
 const GATEWAY_TIMEOUT = 30000; // 30 seconds timeout for responses
 const RECONNECT_DELAY = 5000; // 5 seconds between reconnection attempts
 
@@ -78,6 +79,7 @@ console.log(`  GATEWAY_URL: ${GATEWAY_URL}`);
 console.log(`  GATEWAY_TOKEN: ${GATEWAY_TOKEN ? `${GATEWAY_TOKEN.slice(0, 4)}...${GATEWAY_TOKEN.slice(-4)}` : '(not set)'}`);
 console.log(`  SESSION_KEY: ${SESSION_KEY}`);
 console.log(`  OPENAI_API_KEY: ${process.env.OPENAI_API_KEY ? `${process.env.OPENAI_API_KEY.slice(0, 7)}...${process.env.OPENAI_API_KEY.slice(-4)}` : '(not set)'}`);
+console.log(`  REALTIME_MODEL: ${REALTIME_MODEL}`);
 
 // Gateway WebSocket connection management
 function connectToGateway(): void {
@@ -435,6 +437,11 @@ function createApp() {
     res.json({ authRequired: !!VOICE_AUTH_TOKEN });
   });
 
+  // Config endpoint — returns model name for frontend
+  app.get('/api/config', authMiddleware, (_req: Request, res: Response) => {
+    res.json({ model: REALTIME_MODEL });
+  });
+
   // Health check endpoint
   app.get('/api/health', (_req: Request, res: Response) => {
     const gatewayConnected = gatewayWs !== null && gatewayWs.readyState === WebSocket.OPEN;
@@ -518,7 +525,7 @@ function createApp() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview',
+          model: REALTIME_MODEL,
           voice
         })
       });

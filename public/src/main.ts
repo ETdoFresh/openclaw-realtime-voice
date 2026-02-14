@@ -613,6 +613,16 @@ async function connect(): Promise<void> {
     const { token } = await tokenResponse.json() as TokenResponse;
     log('Token received', 'success');
 
+    // Fetch model configuration from server
+    const configHeaders: Record<string, string> = {};
+    if (authToken) {
+      configHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+    const configResponse = await fetch('/api/config', { headers: configHeaders });
+    const configData = configResponse.ok ? await configResponse.json() as { model: string } : { model: 'gpt-4o-mini-realtime' };
+    const realtimeModel = configData.model;
+    log(`Using model: ${realtimeModel}`, 'info');
+
     // Connect WebSocket for receiving results
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
@@ -840,7 +850,7 @@ async function connect(): Promise<void> {
     await pc.setLocalDescription(offer);
 
     // Send offer to OpenAI
-    const sdpResponse = await fetch('https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview', {
+    const sdpResponse = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(realtimeModel)}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
