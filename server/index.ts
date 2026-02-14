@@ -340,8 +340,9 @@ function connectOpenAI(): void {
   });
 
   ws.on('error', (err) => {
-    console.error('OpenAI WS error:', err);
+    console.error('OpenAI WS error:', err.message || err);
     room.openaiConnecting = false;
+    broadcastToRoom({ type: 'ai-error', error: `Connection failed: ${(err as Error).message || 'unknown'}` });
   });
 
   ws.on('close', () => {
@@ -621,14 +622,14 @@ function handleClientMessage(userId: string, user: RoomUser, data: any): void {
     }
 
     case 'audio-data': {
-      // PCM audio from client - forward to OpenAI if conditions met
-      // data.audio is base64 PCM16 24kHz
-      if (!room.openaiWs || room.openaiWs.readyState !== WebSocket.OPEN) break;
-
-      // Forward if: user has PTT active, OR global AI is active and user isn't muted
-      if (user.pttActive || (room.globalAiActive && !user.muted)) {
-        sendAudioToOpenAI(data.audio);
+      // PCM audio from client - forward to OpenAI
+      // Client already gates what it sends (AI mute, PTT, etc.)
+      if (!room.openaiWs || room.openaiWs.readyState !== WebSocket.OPEN) {
+        // Log occasionally to help debug
+        if (!room.openaiWs && Math.random() < 0.01) console.log('Audio received but OpenAI not connected');
+        break;
       }
+      sendAudioToOpenAI(data.audio);
       break;
     }
 

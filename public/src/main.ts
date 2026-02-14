@@ -47,6 +47,7 @@ let isAiMuted = true;
 let isAiActive = false;
 let isPttActive = false;
 let aiConnected = false;
+let audioSendStarted = false;
 
 // Auth
 let authToken = sessionStorage.getItem('voiceAuthToken') || '';
@@ -296,7 +297,8 @@ function setupAudioCapture(stream: MediaStream): void {
 
   audioWorkletNode.onaudioprocess = (e) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (isAiMuted && !isPttActive) return;
+    if (isMuted) return; // overall mute blocks everything
+    if (isAiMuted && !isPttActive) return; // AI mute blocks AI unless PTT
     // Only send if AI active or PTT active
     if (!isAiActive && !isPttActive) return;
 
@@ -315,6 +317,7 @@ function setupAudioCapture(stream: MediaStream): void {
     const base64 = btoa(binary);
 
     ws.send(JSON.stringify({ type: 'audio-data', audio: base64 }));
+    if (!audioSendStarted) { audioSendStarted = true; log('Sending audio to AI...', 'info'); }
   };
 
   audioSourceNode.connect(audioWorkletNode);
@@ -514,8 +517,8 @@ async function connect(): Promise<void> {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     log('Microphone access granted', 'success');
 
-    // Keep audio track always enabled (ScriptProcessor needs real audio for AI)
-    // Peer muting is handled by replacing sender tracks
+    // Apply initial mute state
+    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
 
     setupVisualizer(localStream);
     setupAudioCapture(localStream);
@@ -561,6 +564,7 @@ function disconnect(): void {
   log('Disconnecting...', 'info');
   isAiActive = false;
   isPttActive = false;
+  audioSendStarted = false;
   cleanup();
   setStatus('', 'Disconnected');
   isConnected = false;
@@ -654,13 +658,8 @@ function toggleConnect(): void {
 
 function toggleMute(): void {
   isMuted = !isMuted;
-  // Mute/unmute audio going to peers by disabling senders
-  for (const [, pc] of peerConnections) {
-    pc.getSenders().forEach(sender => {
-      if (sender.track && sender.track.kind === 'audio') {
-        sender.track.enabled = !isMuted;
-      }
-    });
+  if (localStream) {
+    localStream.getAudioTracks().forEach(t => t.enabled = !isMuted);
   }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'mute', muted: isMuted }));
