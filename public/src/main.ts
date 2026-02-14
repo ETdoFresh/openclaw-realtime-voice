@@ -288,6 +288,7 @@ function setupAudioCapture(stream: MediaStream): void {
   // Clone stream for AI capture — this clone stays enabled even when muted
   // so PTT can send to AI without unmuting for peers
   aiCaptureStream = stream.clone();
+  aiCaptureStream.getAudioTracks().forEach(t => t.enabled = true);
   const captureCtx = new AudioContext({ sampleRate: 24000 });
   audioSourceNode = captureCtx.createMediaStreamSource(aiCaptureStream);
 
