@@ -36,9 +36,10 @@ let aiAudioContext: AudioContext | null = null;
 // Peer connections for mesh WebRTC
 const peerConnections = new Map<string, RTCPeerConnection>();
 
-// Audio capture for AI
+// Audio capture for AI (uses separate cloned stream so mute doesn't affect it)
 let audioWorkletNode: ScriptProcessorNode | null = null;
 let audioSourceNode: MediaStreamAudioSourceNode | null = null;
+let aiCaptureStream: MediaStream | null = null;
 
 // UI state
 let isConnected = false;
@@ -284,10 +285,11 @@ function resetAiAudioQueue(): void {
 // ─── Audio capture for AI ─────────────────────────────────────────────
 
 function setupAudioCapture(stream: MediaStream): void {
-  // Use a separate AudioContext for capture at 24kHz (OpenAI's expected rate)
-  // ScriptProcessorNode for compatibility; captures raw PCM
+  // Clone stream for AI capture — this clone stays enabled even when muted
+  // so PTT can send to AI without unmuting for peers
+  aiCaptureStream = stream.clone();
   const captureCtx = new AudioContext({ sampleRate: 24000 });
-  audioSourceNode = captureCtx.createMediaStreamSource(stream);
+  audioSourceNode = captureCtx.createMediaStreamSource(aiCaptureStream);
 
   // ScriptProcessor: 2048 samples buffer (~85ms at 24kHz) for lower latency
   audioWorkletNode = captureCtx.createScriptProcessor(2048, 1, 1);
@@ -574,6 +576,7 @@ function cleanup(): void {
 
   if (ws) { ws.close(); ws = null; }
   if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+  if (aiCaptureStream) { aiCaptureStream.getTracks().forEach(t => t.stop()); aiCaptureStream = null; }
   if (audioWorkletNode) { audioWorkletNode.disconnect(); audioWorkletNode = null; }
   if (audioSourceNode) { audioSourceNode.disconnect(); audioSourceNode = null; }
   if (aiAudioContext) { aiAudioContext.close(); aiAudioContext = null; }
@@ -661,10 +664,8 @@ function pttStart(): void {
   isPttActive = true;
   pttBtn.classList.add('active');
   transcriptPttBtn.classList.add('active');
-  // PTT supersedes mute - temporarily enable mic track
-  if (isMuted && localStream) {
-    localStream.getAudioTracks().forEach(t => t.enabled = true);
-  }
+  // AI capture uses a separate cloned stream - no need to toggle mic track
+  // Peers won't hear you if muted, but AI will via the clone
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'ptt-start' }));
   }
@@ -691,10 +692,6 @@ function pttEnd(): void {
   transcriptPttBtn.classList.remove('active');
   // Send silence to trigger VAD end-of-speech detection (~500ms)
   sendSilenceFrames(6);
-  // Restore mute state after PTT
-  if (isMuted && localStream) {
-    localStream.getAudioTracks().forEach(t => t.enabled = false);
-  }
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'ptt-stop' }));
   }
