@@ -23,8 +23,6 @@ interface ServerMessage {
   candidate?: RTCIceCandidateInit;
 }
 
-// Speed options (keep in sync with server)
-const SPEED_OPTIONS = [
   { label: 'Very Slow' },
   { label: 'Slow' },
   { label: 'Normal' },
@@ -88,8 +86,6 @@ const muteBtn = document.getElementById('muteBtn') as HTMLButtonElement;
 const aiActiveBtn = document.getElementById('aiActiveBtn') as HTMLButtonElement;
 const pttBtn = document.getElementById('pttBtn') as HTMLButtonElement;
 const voiceSelect = document.getElementById('voiceSelect') as HTMLSelectElement;
-const speedRange = document.getElementById('speedRange') as HTMLInputElement;
-const speedLabel = document.getElementById('speedLabel') as HTMLSpanElement;
 const visualizerCanvas = document.getElementById('visualizer') as HTMLCanvasElement;
 const taskStatusDiv = document.getElementById('taskStatus') as HTMLDivElement;
 const transcriptSidebar = document.getElementById('transcriptSidebar') as HTMLDivElement;
@@ -379,7 +375,6 @@ function handleServerMessage(msg: ServerMessage): void {
       ws!.send(JSON.stringify({
         type: 'join',
         voice: voiceSelect.value,
-        speed: Number(speedRange.value),
       }));
       break;
 
@@ -664,19 +659,14 @@ function updateUserCount(count: number): void {
 
 // ─── Settings ─────────────────────────────────────────────────────────
 
-speedRange.addEventListener('input', () => {
-  speedLabel.textContent = SPEED_OPTIONS[Number(speedRange.value)].label;
 });
 
 voiceSelect.addEventListener('change', () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'update-settings', voice: voiceSelect.value, speed: Number(speedRange.value) }));
   }
 });
 
-speedRange.addEventListener('change', () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'update-settings', voice: voiceSelect.value, speed: Number(speedRange.value) }));
   }
 });
 
