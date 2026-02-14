@@ -430,42 +430,42 @@ button:disabled {
   color: #e0e0e0;
 }
 
-.transcript-header-actions {
+/* Transcript Actions Bar */
+.transcript-actions-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-top: 1px solid #333;
+  background: #111;
 }
 
-.transcript-connect-btn,
-.transcript-mute-btn,
-.transcript-ptt-btn {
+.transcript-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   background: #374151;
   border: none;
   color: white;
   cursor: pointer;
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  width: 36px;
-  height: 36px;
+  padding: 10px 16px;
+  border-radius: 12px;
   transition: background 0.2s;
-  flex: none;
+  flex: 1;
+  min-width: 0;
 }
 
-.transcript-connect-btn:hover,
-.transcript-mute-btn:hover,
-.transcript-ptt-btn:hover {
+.transcript-action-btn:hover {
   background: #4b5563;
 }
 
-.transcript-mute-btn.muted {
-  background: #dc2626;
-}
-
-.transcript-mute-btn.muted:hover {
-  background: #ef4444;
+.action-label {
+  font-size: 11px;
+  font-weight: 500;
+  opacity: 0.8;
 }
 
 .transcript-connect-btn {
@@ -477,6 +477,14 @@ button:disabled {
 }
 
 .transcript-connect-btn.connected:hover {
+  background: #ef4444;
+}
+
+.transcript-mute-btn.muted {
+  background: #dc2626;
+}
+
+.transcript-mute-btn.muted:hover {
   background: #ef4444;
 }
 
@@ -839,11 +847,34 @@ button:disabled {
 
   .transcript-content {
     padding: 12px;
+    padding-bottom: 100px;
   }
 
   .transcript-entry {
     padding: 10px;
     margin-bottom: 10px;
+  }
+
+  /* Big bottom action bar for one-handed use */
+  .transcript-actions-bar {
+    padding: 16px 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    gap: 10px;
+  }
+
+  .transcript-action-btn {
+    padding: 14px 8px;
+    border-radius: 14px;
+    gap: 6px;
+  }
+
+  .transcript-action-btn svg {
+    width: 28px;
+    height: 28px;
+  }
+
+  .action-label {
+    font-size: 12px;
   }
 
   /* Auth card on mobile */

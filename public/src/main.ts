@@ -125,7 +125,7 @@ let audioContext: AudioContext | null = null;
 let analyser: AnalyserNode | null = null;
 let microphone: MediaStreamAudioSourceNode | null = null;
 let animationFrameId: number | null = null;
-let isMuted = false;
+let isMuted = true;
 let currentResponseId: string | null = null;
 
 // Auth token from sessionStorage
@@ -266,13 +266,25 @@ showTranscriptBtn.addEventListener('click', () => {
   updateShowTranscriptBtn();
 });
 
-// Sync the transcript connect button icon and style with connection state
+// Sync the transcript connect button icon, label, and style with connection state
 function updateTranscriptConnectBtn(connected: boolean): void {
   transcriptConnectBtn.classList.toggle('connected', connected);
   const iconConnect = transcriptConnectBtn.querySelector('.icon-connect') as SVGElement;
-  const iconDisconnect = transcriptConnectBtn.querySelector('.icon-disconnect') as SVGElement;
+  const connectLabel = transcriptConnectBtn.querySelector('.connect-label') as HTMLElement;
+  const disconnectLabel = transcriptConnectBtn.querySelector('.disconnect-label') as HTMLElement;
   if (iconConnect) iconConnect.style.display = connected ? 'none' : '';
-  if (iconDisconnect) iconDisconnect.style.display = connected ? '' : 'none';
+  if (connectLabel) connectLabel.style.display = connected ? 'none' : '';
+  if (disconnectLabel) disconnectLabel.style.display = connected ? '' : 'none';
+  // Swap SVG: show pause icon when connected (reuse the icon-connect svg, hide it; no icon-disconnect svg in new markup)
+  // Actually we removed icon-disconnect svg, need to swap the fill
+  // Let me just toggle the SVG content
+  if (connected) {
+    transcriptConnectBtn.querySelector('svg')!.outerHTML =
+      `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+  } else {
+    transcriptConnectBtn.querySelector('svg')!.outerHTML =
+      `<svg class="icon-connect" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+  }
 }
 
 // Transcript connect/disconnect button
@@ -507,8 +519,12 @@ function setMuted(muted: boolean): void {
   transcriptMuteBtn.classList.toggle('muted', isMuted);
   const micOn = transcriptMuteBtn.querySelector('.mic-on') as SVGElement;
   const micOff = transcriptMuteBtn.querySelector('.mic-off') as SVGElement;
+  const muteLabel = transcriptMuteBtn.querySelector('.mute-label') as HTMLElement;
+  const unmuteLabel = transcriptMuteBtn.querySelector('.unmute-label') as HTMLElement;
   if (micOn) micOn.style.display = isMuted ? 'none' : '';
   if (micOff) micOff.style.display = isMuted ? '' : 'none';
+  if (muteLabel) muteLabel.style.display = isMuted ? 'none' : '';
+  if (unmuteLabel) unmuteLabel.style.display = isMuted ? '' : 'none';
 
   log(isMuted ? 'Microphone muted' : 'Microphone unmuted', 'info');
 }
@@ -677,8 +693,11 @@ async function connect(): Promise<void> {
     // Setup audio visualizer
     setupVisualizer(stream);
 
-    // Add audio track
-    stream.getTracks().forEach(track => pc!.addTrack(track, stream));
+    // Add audio track (start muted)
+    stream.getTracks().forEach(track => {
+      if (track.kind === 'audio') track.enabled = !isMuted;
+      pc!.addTrack(track, stream);
+    });
 
     // Setup audio output
     pc.ontrack = (event: RTCTrackEvent) => {
@@ -716,11 +735,13 @@ async function connect(): Promise<void> {
       dc!.send(JSON.stringify(sessionUpdate));
       log('Session configured with system prompt and tools', 'success');
 
-      setStatus('connected', 'Connected - Speak now');
+      setStatus('connected', isMuted ? 'Connected - Muted' : 'Connected - Speak now');
       disconnectBtn.disabled = false;
       muteBtn.disabled = false;
       newSessionBtn.disabled = false;
       updateTranscriptConnectBtn(true);
+      // Sync mute UI (we start muted)
+      setMuted(isMuted);
     };
 
     dc.onmessage = async (event: MessageEvent) => {
@@ -858,7 +879,6 @@ function disconnect(): void {
   disconnectBtn.disabled = true;
   muteBtn.disabled = true;
   newSessionBtn.disabled = true;
-  setMuted(false);
   updateTranscriptConnectBtn(false);
 }
 
