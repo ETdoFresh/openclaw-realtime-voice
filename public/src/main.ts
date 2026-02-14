@@ -246,12 +246,151 @@ function cancelReconnect(): void {
   reconnectAttempts = 0;
 }
 
-// Re-acquire wake lock when tab becomes visible again (browsers release it on hide)
+// ── Push Notification Support ─────────────────────────────────────────
+let pushSubscription: PushSubscription | null = null;
+let swRegistration: ServiceWorkerRegistration | null = null;
+
+async function registerServiceWorker(): Promise<void> {
+  if (!('serviceWorker' in navigator)) {
+    log('Service Worker not supported', 'info');
+    return;
+  }
+  try {
+    swRegistration = await navigator.serviceWorker.register('/sw.js');
+    log('Service Worker registered', 'success');
+  } catch (err) {
+    log(`Service Worker registration failed: ${(err as Error).message}`, 'error');
+  }
+}
+
+async function subscribeToPush(): Promise<void> {
+  if (!swRegistration) return;
+  if (!('PushManager' in window)) {
+    log('Push notifications not supported', 'info');
+    return;
+  }
+
+  try {
+    // Get VAPID public key from server
+    const headers: Record<string, string> = {};
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    const res = await fetch('/api/push/vapid-key', { headers });
+    if (!res.ok) {
+      log('Push notifications not configured on server', 'info');
+      return;
+    }
+    const { publicKey } = await res.json() as { publicKey: string };
+
+    // Check existing subscription
+    pushSubscription = await swRegistration.pushManager.getSubscription();
+
+    if (!pushSubscription) {
+      // Convert VAPID key from base64url to Uint8Array
+      const padding = '='.repeat((4 - publicKey.length % 4) % 4);
+      const base64 = (publicKey + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      const applicationServerKey = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; i++) {
+        applicationServerKey[i] = rawData.charCodeAt(i);
+      }
+
+      pushSubscription = await swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+      log('Push notifications enabled', 'success');
+    }
+
+    // Send subscription to server
+    const subHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) subHeaders['Authorization'] = `Bearer ${authToken}`;
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: subHeaders,
+      body: JSON.stringify({ subscription: pushSubscription, sessionId }),
+    });
+  } catch (err) {
+    log(`Push subscription failed: ${(err as Error).message}`, 'info');
+  }
+}
+
+// ── Reconnect on Visibility Change ───────────────────────────────────
+// When the user comes back to the tab, check connection and reconnect if needed.
+// Also re-acquire wake lock (browsers release it when tab is hidden).
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && backgroundMode && pc) {
-    acquireWakeLock();
+  if (document.visibilityState === 'visible') {
+    // Re-acquire wake lock
+    if (backgroundMode && pc) {
+      acquireWakeLock();
+    }
+
+    // If we were connected but the connection died while backgrounded, reconnect
+    if (backgroundMode && !pc) {
+      log('Tab visible — reconnecting...', 'info');
+      cancelReconnect(); // cancel any pending timer, reconnect immediately
+      connect();
+    } else if (pc && (pc.connectionState === 'disconnected' || pc.connectionState === 'failed')) {
+      log('Tab visible — connection lost, reconnecting...', 'info');
+      cleanup();
+      connect();
+    }
+
+    // Reconnect WebSocket if it dropped
+    if (ws && ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING) {
+      log('WebSocket dropped — reconnecting...', 'info');
+      reconnectWebSocket();
+    }
+
+    // Fetch any buffered results we missed while backgrounded
+    fetchBufferedResults();
   }
 });
+
+function reconnectWebSocket(): void {
+  if (ws) {
+    try { ws.close(); } catch { /* ignore */ }
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws.onopen = () => {
+    ws!.send(JSON.stringify({ type: 'register', sessionId }));
+    log('WebSocket reconnected', 'success');
+  };
+  ws.onmessage = (event: MessageEvent) => {
+    const data = JSON.parse(event.data) as WebSocketMessage;
+    if (data.type === 'result') {
+      enqueueOrDeliver({ type: 'result', text: data.text || '', taskId: data.taskId, error: data.error });
+    } else if (data.type === 'notification') {
+      enqueueOrDeliver({ type: 'notification', text: data.text || '' });
+    }
+  };
+}
+
+async function fetchBufferedResults(): Promise<void> {
+  try {
+    const headers: Record<string, string> = {};
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+    const res = await fetch(`/api/push/buffered?sessionId=${encodeURIComponent(sessionId)}`, { headers });
+    if (!res.ok) return;
+    const { results } = await res.json() as { results: Array<{ type: string; taskId?: string; text: string; error?: boolean }> };
+    if (results && results.length > 0) {
+      log(`Received ${results.length} buffered result(s)`, 'info');
+      for (const r of results) {
+        enqueueOrDeliver({
+          type: (r.type as 'result' | 'notification') || 'result',
+          text: r.text,
+          taskId: r.taskId,
+          error: r.error,
+        });
+      }
+    }
+  } catch {
+    // Server may not support buffering yet — that's fine
+  }
+}
+
+// Register SW + subscribe to push on load
+registerServiceWorker().then(() => subscribeToPush());
 
 // Tool definition
 const TOOL_DEFINITION = {

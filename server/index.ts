@@ -1,11 +1,61 @@
 import express, { Request, Response } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, Server as HTTPServer } from 'http';
+import webpush from 'web-push';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 
 dotenv.config();
+
+// ── Web Push (VAPID) Configuration ──────────────────────────────────
+// Generate keys with: npx web-push generate-vapid-keys
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@openclaw.ai';
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  console.log('  VAPID push notifications: enabled');
+} else {
+  console.log('  VAPID push notifications: disabled (set VAPID_PUBLIC_KEY & VAPID_PRIVATE_KEY)');
+}
+
+// Push subscriptions: sessionId -> PushSubscription
+const pushSubscriptions = new Map<string, webpush.PushSubscription>();
+
+// Buffered results: sessionId -> array of results (delivered when client reconnects)
+const MAX_BUFFER_SIZE = 50;
+const bufferedResults = new Map<string, Array<{ type: string; taskId?: string; text: string; error?: boolean; timestamp: number }>>();
+
+function bufferResult(sessionId: string, result: { type: string; taskId?: string; text: string; error?: boolean }): void {
+  let buf = bufferedResults.get(sessionId);
+  if (!buf) {
+    buf = [];
+    bufferedResults.set(sessionId, buf);
+  }
+  buf.push({ ...result, timestamp: Date.now() });
+  // Cap buffer size
+  if (buf.length > MAX_BUFFER_SIZE) buf.shift();
+}
+
+async function sendPushNotification(sessionId: string, payload: { title: string; body: string; taskId?: string; tag?: string }): Promise<void> {
+  const sub = pushSubscriptions.get(sessionId);
+  if (!sub || !VAPID_PUBLIC_KEY) return;
+
+  try {
+    await webpush.sendNotification(sub, JSON.stringify(payload));
+    console.log(`Push notification sent to session ${sessionId}`);
+  } catch (err: any) {
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      // Subscription expired/invalid — remove it
+      pushSubscriptions.delete(sessionId);
+      console.log(`Removed expired push subscription for ${sessionId}`);
+    } else {
+      console.error(`Push notification error for ${sessionId}:`, err.message);
+    }
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -246,14 +296,25 @@ function handleGatewayMessage(message: any): void {
       run.text = data.text;
     } else if (stream === 'lifecycle' && data?.phase === 'end') {
       // Agent run finished — send final result to client
-      const ws = sessions.get(run.sessionId);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'result',
-          taskId: run.taskId,
-          text: run.text || 'Task completed (no text response)'
-        }));
+      const resultPayload = {
+        type: 'result',
+        taskId: run.taskId,
+        text: run.text || 'Task completed (no text response)'
+      };
+      const clientWs = sessions.get(run.sessionId);
+      if (clientWs && clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify(resultPayload));
         console.log(`Sent agent result for task ${run.taskId} to session ${run.sessionId}`);
+      } else {
+        // Client disconnected — buffer the result and send push notification
+        console.log(`Client ${run.sessionId} offline — buffering result for task ${run.taskId}`);
+        bufferResult(run.sessionId, resultPayload);
+        sendPushNotification(run.sessionId, {
+          title: 'OpenClaw Voice',
+          body: run.text?.slice(0, 200) || 'Task completed',
+          taskId: run.taskId,
+          tag: `task-${run.taskId}`,
+        });
       }
       activeRuns.delete(runId);
     }
@@ -265,15 +326,34 @@ function handleGatewayMessage(message: any): void {
     const notificationText = message.text || message.message || message.notification;
     console.log('Proactive notification from gateway:', notificationText);
 
-    // Broadcast to all connected clients
-    for (const [sessionId, clientWs] of sessions.entries()) {
+    // Broadcast to all connected clients; buffer + push for offline ones
+    for (const [sid, clientWs] of sessions.entries()) {
       if (clientWs.readyState === WebSocket.OPEN) {
         clientWs.send(JSON.stringify({
           type: 'notification',
           text: notificationText,
           timestamp: Date.now()
         }));
-        console.log(`Sent notification to session ${sessionId}`);
+        console.log(`Sent notification to session ${sid}`);
+      } else {
+        bufferResult(sid, { type: 'notification', text: notificationText });
+        sendPushNotification(sid, {
+          title: 'OpenClaw Voice',
+          body: typeof notificationText === 'string' ? notificationText.slice(0, 200) : 'New notification',
+          tag: 'notification',
+        });
+      }
+    }
+
+    // Also push to sessions that registered push but have no active WebSocket
+    for (const [sid] of pushSubscriptions.entries()) {
+      if (!sessions.has(sid)) {
+        bufferResult(sid, { type: 'notification', text: notificationText });
+        sendPushNotification(sid, {
+          title: 'OpenClaw Voice',
+          body: typeof notificationText === 'string' ? notificationText.slice(0, 200) : 'New notification',
+          tag: 'notification',
+        });
       }
     }
   }
@@ -602,6 +682,38 @@ function createApp() {
         }
       }
     })();
+  });
+
+  // ── Push Notification Endpoints ──────────────────────────────────────
+
+  // Return VAPID public key so the client can subscribe
+  app.get('/api/push/vapid-key', authMiddleware, (_req: Request, res: Response) => {
+    if (!VAPID_PUBLIC_KEY) {
+      return res.status(404).json({ error: 'Push notifications not configured' });
+    }
+    res.json({ publicKey: VAPID_PUBLIC_KEY });
+  });
+
+  // Store a push subscription for a session
+  app.post('/api/push/subscribe', authMiddleware, (req: Request, res: Response) => {
+    const { subscription, sessionId } = req.body;
+    if (!subscription || !sessionId) {
+      return res.status(400).json({ error: 'Missing subscription or sessionId' });
+    }
+    pushSubscriptions.set(sessionId, subscription);
+    console.log(`Push subscription registered for session ${sessionId}`);
+    res.json({ status: 'ok' });
+  });
+
+  // Retrieve buffered results for a session (called on reconnect / visibility change)
+  app.get('/api/push/buffered', authMiddleware, (req: Request, res: Response) => {
+    const sessionId = req.query.sessionId as string;
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Missing sessionId' });
+    }
+    const results = bufferedResults.get(sessionId) || [];
+    bufferedResults.delete(sessionId); // drain buffer
+    res.json({ results });
   });
 
   // Reset the OpenClaw chat session (clear conversation history)
