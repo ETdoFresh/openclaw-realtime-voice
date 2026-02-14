@@ -164,6 +164,7 @@ const taskStatusDiv = document.getElementById('taskStatus') as HTMLDivElement;
 const transcriptSidebar = document.getElementById('transcriptSidebar') as HTMLDivElement;
 const transcriptContent = document.getElementById('transcriptContent') as HTMLDivElement;
 const transcriptToggle = document.getElementById('transcriptToggle') as HTMLButtonElement;
+const newSessionBtn = document.getElementById('newSessionBtn') as HTMLButtonElement;
 
 // Speed slider label updates
 speedRange.addEventListener('input', () => {
@@ -574,6 +575,7 @@ async function connect(): Promise<void> {
       setStatus('connected', 'Connected - Speak now');
       disconnectBtn.disabled = false;
       muteBtn.disabled = false;
+      newSessionBtn.disabled = false;
     };
 
     dc.onmessage = async (event: MessageEvent) => {
@@ -709,8 +711,41 @@ function disconnect(): void {
   connectBtn.disabled = false;
   disconnectBtn.disabled = true;
   muteBtn.disabled = true;
+  newSessionBtn.disabled = true;
   isMuted = false;
   muteBtn.classList.remove('muted');
+}
+
+// New session: reset OpenClaw history + reconnect OpenAI voice
+async function newSession(): Promise<void> {
+  log('Resetting session...', 'info');
+  newSessionBtn.disabled = true;
+
+  // 1. Reset OpenClaw chat session (clear conversation history)
+  try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+    const res = await fetch('/api/session/reset', { method: 'POST', headers });
+    if (res.ok) {
+      log('OpenClaw session cleared', 'success');
+    } else {
+      const err = await res.json();
+      log(`OpenClaw reset failed: ${err.error}`, 'error');
+    }
+  } catch (error) {
+    log(`OpenClaw reset error: ${(error as Error).message}`, 'error');
+  }
+
+  // 2. Disconnect and reconnect the OpenAI voice session
+  cleanup();
+  activeTasks.clear();
+  renderTaskStatus();
+  transcript.length = 0;
+  renderTranscript();
+
+  log('Starting fresh session...', 'info');
+  await connect();
 }
 
 // Cleanup function
@@ -736,6 +771,7 @@ function cleanup(): void {
 // Attach event listeners
 connectBtn.addEventListener('click', connect);
 disconnectBtn.addEventListener('click', disconnect);
+newSessionBtn.addEventListener('click', newSession);
 
 // Initial log
 log('Ready to connect', 'info');

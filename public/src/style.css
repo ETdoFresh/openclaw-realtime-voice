@@ -224,6 +224,16 @@ button:disabled {
   box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
 }
 
+.btn-new-session {
+  background: #2563eb;
+  color: white;
+}
+
+.btn-new-session:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+}
+
 .log {
   background: #111;
   border: 1px solid #333;

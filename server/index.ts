@@ -201,8 +201,27 @@ function handleGatewayMessage(message: any): void {
 
   // Handle streaming agent events — collect text and forward final result to client
   if (message.type === 'event' && message.event === 'agent') {
-    const { runId, stream, data } = message.payload || {};
-    const run = activeRuns.get(runId);
+    const { runId, stream, data, sessionKey } = message.payload || {};
+    if (!runId) return;
+
+    let run = activeRuns.get(runId);
+
+    // If we don't have a tracked run but the sessionKey matches ours,
+    // create an ad-hoc entry (handles subagent runs spawned by the gateway)
+    if (!run && sessionKey) {
+      const normalizedKey = `agent:main:${SESSION_KEY.toLowerCase()}`;
+      if (sessionKey === normalizedKey && stream === 'lifecycle' && data?.phase === 'start') {
+        // Find the most recent client session to forward results to
+        const lastSessionId = Array.from(sessions.keys()).pop();
+        if (lastSessionId) {
+          const taskId = `subtask_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          run = { taskId, sessionId: lastSessionId, text: '' };
+          activeRuns.set(runId, run);
+          console.log(`Auto-tracking subagent run ${runId} for session ${lastSessionId}`);
+        }
+      }
+    }
+
     if (!run) return;
 
     if (stream === 'assistant' && data?.text) {
@@ -535,6 +554,44 @@ function createApp() {
         }
       }
     })();
+  });
+
+  // Reset the OpenClaw chat session (clear conversation history)
+  app.post('/api/session/reset', authMiddleware, async (_req: Request, res: Response) => {
+    if (!gatewayWs || gatewayWs.readyState !== WebSocket.OPEN) {
+      return res.status(503).json({ error: 'Gateway not connected' });
+    }
+
+    const requestId = generateRequestId();
+
+    const request = {
+      type: 'req',
+      id: requestId,
+      method: 'sessions.reset',
+      params: {
+        sessionKey: `agent:main:${SESSION_KEY.toLowerCase()}`
+      }
+    };
+
+    // Wait for the response
+    const responsePromise = new Promise<any>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingRequests.delete(requestId);
+        reject(new Error('Session reset timeout'));
+      }, GATEWAY_TIMEOUT);
+      pendingRequests.set(requestId, { resolve, reject, timeout });
+    });
+
+    try {
+      gatewayWs.send(JSON.stringify(request));
+      console.log(`Sent session reset request ${requestId}`);
+      const result = await responsePromise;
+      console.log('Session reset result:', result);
+      res.json({ status: 'ok', message: 'Session reset successfully' });
+    } catch (error) {
+      console.error('Session reset error:', error);
+      res.status(500).json({ error: (error as Error).message });
+    }
   });
 
   return app;
