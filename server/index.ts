@@ -266,6 +266,55 @@ async function sendToGateway(message: string, requestId?: string): Promise<strin
   });
 }
 
+// ─── Response Queue ───────────────────────────────────────────────────
+// Serializes injections into OpenAI so responses don't overlap.
+
+interface QueuedResponse {
+  taskId: string | null;
+  text: string;
+}
+
+const responseQueue: QueuedResponse[] = [];
+let responseInFlight = false;
+
+function enqueueResponse(taskId: string | null, text: string): void {
+  responseQueue.push({ taskId, text });
+  drainResponseQueue();
+}
+
+function drainResponseQueue(): void {
+  if (responseInFlight || responseQueue.length === 0) return;
+  if (!room.openaiWs || room.openaiWs.readyState !== WebSocket.OPEN) return;
+
+  const { taskId, text } = responseQueue.shift()!;
+  responseInFlight = true;
+
+  const prefix = taskId ? '[OpenClaw result]' : '[OpenClaw notification]';
+  room.openaiWs.send(JSON.stringify({
+    type: 'conversation.item.create',
+    item: {
+      type: 'message',
+      role: 'user',
+      content: [{ type: 'input_text', text: `${prefix} ${text}` }]
+    }
+  }));
+  room.openaiWs.send(JSON.stringify({ type: 'response.create' }));
+
+  // Safety timeout: if we never get response.done, unblock after 30s
+  setTimeout(() => {
+    if (responseInFlight) {
+      console.warn('Response queue: safety timeout, unblocking queue');
+      responseInFlight = false;
+      drainResponseQueue();
+    }
+  }, 30000);
+}
+
+function onResponseDone(): void {
+  responseInFlight = false;
+  drainResponseQueue();
+}
+
 // ─── Broadcast helpers ────────────────────────────────────────────────
 
 function broadcastToRoom(msg: any, excludeUserId?: string): void {
@@ -359,6 +408,9 @@ function disconnectOpenAI(): void {
     room.openaiWs = null;
     room.openaiSessionConfigured = false;
   }
+  // Clear response queue on disconnect
+  responseQueue.length = 0;
+  responseInFlight = false;
 }
 
 function handleOpenAIMessage(msg: any): void {
@@ -439,6 +491,7 @@ function handleOpenAIMessage(msg: any): void {
 
   if (msg.type === 'response.done') {
     broadcastToRoom({ type: 'response-done' });
+    onResponseDone();
     return;
   }
 
@@ -456,16 +509,7 @@ function handleOpenAIMessage(msg: any): void {
 
 function injectResultIntoOpenAI(taskId: string | null, text: string): void {
   if (!room.openaiWs || room.openaiWs.readyState !== WebSocket.OPEN) return;
-  const prefix = taskId ? '[OpenClaw result]' : '[OpenClaw notification]';
-  room.openaiWs.send(JSON.stringify({
-    type: 'conversation.item.create',
-    item: {
-      type: 'message',
-      role: 'user',
-      content: [{ type: 'input_text', text: `${prefix} ${text}` }]
-    }
-  }));
-  room.openaiWs.send(JSON.stringify({ type: 'response.create' }));
+  enqueueResponse(taskId, text);
 }
 
 function sendAudioToOpenAI(audioBase64: string): void {
