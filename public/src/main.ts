@@ -391,7 +391,6 @@ function handleServerMessage(msg: ServerMessage): void {
     case 'room-users':
       // Create peer connections to existing users (we are initiator)
       if (msg.users) {
-        updateUserCount(msg.users.length + 1);
         msg.users.forEach(userId => createPeerConnection(userId, true));
       }
       break;
@@ -400,7 +399,6 @@ function handleServerMessage(msg: ServerMessage): void {
       if (msg.userId) {
         log(`User ${msg.userId.slice(-6)} joined`, 'info');
         createPeerConnection(msg.userId, false); // they will send offer
-        updateUserCount(peerConnections.size + 1);
       }
       break;
 
@@ -409,7 +407,6 @@ function handleServerMessage(msg: ServerMessage): void {
         log(`User ${msg.userId.slice(-6)} left`, 'info');
         const pc = peerConnections.get(msg.userId);
         if (pc) { pc.close(); peerConnections.delete(msg.userId); }
-        updateUserCount(peerConnections.size + 1);
       }
       break;
 
@@ -496,6 +493,10 @@ function handleServerMessage(msg: ServerMessage): void {
 
     case 'ai-error':
       log(`AI error: ${msg.error}`, 'error');
+      break;
+
+    case 'participant-count':
+      updateUserCount((msg as any).count || 0);
       break;
 
     case 'user-muted':
@@ -700,7 +701,7 @@ function pttEnd(): void {
 }
 
 function updateUserCount(count: number): void {
-  if (userCountSpan) userCountSpan.textContent = `${count}`;
+  if (userCountSpan) userCountSpan.textContent = `${count} ${count === 1 ? 'participant' : 'participants'}`;
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────

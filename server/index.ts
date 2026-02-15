@@ -317,6 +317,10 @@ function onResponseDone(): void {
 
 // ─── Broadcast helpers ────────────────────────────────────────────────
 
+function broadcastParticipantCount(): void {
+  broadcastToRoom({ type: 'participant-count', count: room.users.size });
+}
+
 function broadcastToRoom(msg: any, excludeUserId?: string): void {
   const data = JSON.stringify(msg);
   for (const [userId, user] of room.users) {
@@ -743,6 +747,9 @@ export async function start(port?: number): Promise<void> {
     // Send userId to client
     ws.send(JSON.stringify({ type: 'welcome', userId }));
 
+    // Broadcast updated participant count
+    broadcastParticipantCount();
+
     ws.on('message', (message: Buffer) => {
       try {
         const data = JSON.parse(message.toString());
@@ -755,6 +762,7 @@ export async function start(port?: number): Promise<void> {
     ws.on('close', () => {
       room.users.delete(userId);
       broadcastToRoom({ type: 'user-left', userId });
+      broadcastParticipantCount();
       updateAiConnection();
       console.log(`User ${userId} left (${room.users.size} users)`);
 
