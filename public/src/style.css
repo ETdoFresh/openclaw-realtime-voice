@@ -45,7 +45,7 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 8px;
+  margin: 0;
 }
 
 .participant-badge span {
